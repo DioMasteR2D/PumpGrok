@@ -323,10 +323,27 @@ class _Handler(BaseHTTPRequestHandler):
             headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
             result: dict[str, Any] = {"connected": False, "region": "eu", "ping": None, "wallets": None}
             try:
+                # Bloom documents these read endpoints as GET. Some API gateway
+                # deployments have returned 405/use POST; retry that response once
+                # with an empty JSON body, without ever invoking a trading endpoint.
                 ping = httpx.get("https://eu.solana.bloombot.app/api/v1/ping", headers=headers, timeout=8.0)
+                if ping.status_code == 405:
+                    ping = httpx.post(
+                        "https://eu.solana.bloombot.app/api/v1/ping",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={},
+                        timeout=8.0,
+                    )
                 result["ping"] = ping.json() if ping.content else {"http_status": ping.status_code}
                 result["ping_http_status"] = ping.status_code
                 wallets = httpx.get("https://eu.solana.bloombot.app/api/v1/wallets", headers=headers, timeout=8.0)
+                if wallets.status_code == 405:
+                    wallets = httpx.post(
+                        "https://eu.solana.bloombot.app/api/v1/wallets",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={},
+                        timeout=8.0,
+                    )
                 result["wallets"] = wallets.json() if wallets.content else {"http_status": wallets.status_code}
                 result["wallets_http_status"] = wallets.status_code
                 result["connected"] = ping.is_success and wallets.is_success
