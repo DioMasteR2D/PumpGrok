@@ -301,9 +301,38 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(405, {"error": {"code": "method_not_allowed", "message": "use POST"}})
 
     def do_GET(self) -> None:
-        # Liveness only: no tool, seat or ledger detail, and no token required.
-        if self.path.split("?", 1)[0] == "/healthz":
+        # Public liveness only; Bloom account data requires the chief seat token.
+        path = self.path.split("?", 1)[0]
+        state = self.server.gateway_state  # type: ignore[attr-defined]
+        if path == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
+            return
+        if path == "/bloom/status":
+            expected = state["tokens"].get("chief")
+            presented = _presented_token(self.headers)
+            if not expected or not presented or not hmac.compare_digest(
+                presented.encode(), expected.encode()
+            ):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief token required"}})
+                return
+            api_key = __import__("os").environ.get("BLOOM_API_KEY", "").strip()
+            if not api_key:
+                self._send_json(503, {"connected": False, "error": "BLOOM_API_KEY is not configured"})
+                return
+            headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+            result: dict[str, Any] = {"connected": False, "region": "eu", "ping": None, "wallets": None}
+            try:
+                ping = httpx.get("https://eu.solana.bloombot.app/api/v1/ping", headers=headers, timeout=8.0)
+                result["ping"] = ping.json() if ping.content else {"http_status": ping.status_code}
+                result["ping_http_status"] = ping.status_code
+                wallets = httpx.get("https://eu.solana.bloombot.app/api/v1/wallets", headers=headers, timeout=8.0)
+                result["wallets"] = wallets.json() if wallets.content else {"http_status": wallets.status_code}
+                result["wallets_http_status"] = wallets.status_code
+                result["connected"] = ping.is_success and wallets.is_success
+                self._send_json(200 if result["connected"] else 502, result)
+            except (httpx.HTTPError, ValueError):
+                log.warning("Bloom read-only status request failed")
+                self._send_json(502, {"connected": False, "error": "Bloom API request failed"})
             return
         self._method_not_allowed()
 
