@@ -50,6 +50,8 @@ bots:
     description: Ledger of record, post-trade review, daily and weekly reports. Off-channel.
 
 ownership:
+  - pattern: "android/**"
+    owner: bot-02-risk
   # --- General suffix rules (first, so directory rules below override) ----
   - pattern: "**/*.py"
     owner: bot-02-risk
