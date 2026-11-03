@@ -82,7 +82,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 }
 
 @Composable private fun App(){
- var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("IyIBZCqnOMIirRWIF-y6gXy8UBarVU75yrbEYTe1raCVGgfxVCX13VXtvFp6H3bw") }
+ var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("") }
  var tools by remember { mutableStateOf(emptyList<DeskTool>()) }; var client by remember { mutableStateOf<DeskClient?>(null) }
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
@@ -91,13 +91,13 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
  LaunchedEffect(Unit) {
-  run {
+  if (token.isNotBlank()) run {
    val base=gateway.trim().removeSuffix("/")
    val c=DeskClient(base,seat.trim(),token.trim())
    val found=c.connect()
-   client=c;tools=found;status="CONNECTED · PAPER"
+   client=c;tools=found;status="CONNECTED · LIVE LOCKED"
    message="Αυτόματη σύνδεση επιτυχής · ${found.size} εργαλεία · ${seat.uppercase()}"
-   equity="10 SOL";cash="10 SOL";pnl="0 SOL"
+   equity="--";cash="--";pnl="--"
    val seats=listOf("chief","scout","risk","whale","sniper","rug","exit","shill","signal","journal")
    val health=linkedMapOf<String,String>()
    for (short in seats) {
@@ -126,15 +126,15 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  }}) { pad ->
   LazyColumn(Modifier.fillMaxSize().padding(pad).background(Bg).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(top=18.dp,bottom=24.dp)){
    item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column { Text("DioMasteR2D Grokbot Trade",fontSize=20.sp,fontWeight=FontWeight.Bold);Text("SOLANA · PAPER TRADING DESK",fontSize=10.sp,color=Muted,letterSpacing=2.sp) }
-    Column(horizontalAlignment=Alignment.End){Text("●  "+status,fontSize=10.sp,color=if(status.startsWith("CONNECTED")) Green else Red);Text("PAPER ONLY",fontSize=10.sp,color=Green)}
+    Column { Text("DioMasteR2D Grokbot Trade",fontSize=20.sp,fontWeight=FontWeight.Bold);Text("SOLANA · SECURE DESK",fontSize=10.sp,color=Muted,letterSpacing=2.sp) }
+    Column(horizontalAlignment=Alignment.End){Text("●  "+status,fontSize=10.sp,color=if(status.startsWith("CONNECTED")) Green else Red);Text("LIVE LOCKED",fontSize=10.sp,color=Red)}
    }}
    when(tab){
     0 -> {
      item { CardBox { Column {
-      Text("PAPER PORTFOLIO",fontSize=11.sp,color=Muted,letterSpacing=1.5.sp)
+      Text("PORTFOLIO · VERIFIED DATA ONLY",fontSize=11.sp,color=Muted,letterSpacing=1.5.sp)
       Text(equity,fontSize=36.sp,fontWeight=FontWeight.Bold,color=Color.White)
-      Text("Equity · live data appears after gateway connection",fontSize=11.sp,color=Muted)
+      Text("No verified wallet balance loaded",fontSize=11.sp,color=Muted)
       Spacer(Modifier.height(10.dp));Row(horizontalArrangement=Arrangement.spacedBy(18.dp)){Metric("P&L",pnl,Green);Metric("CASH",cash,Color.White)}
       Spacer(Modifier.height(12.dp));EquityChart()
       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("LIVE",color=Green,fontSize=12.sp,fontWeight=FontWeight.Bold);Text("1H     4H     1D     1W     ALL",color=Green,fontSize=11.sp)}
@@ -209,10 +209,10 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       }},enabled=!busy&&gateway.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT DESK")}
       Text(message,fontSize=11.sp,color=Muted)
       Text("Phantom wallet: secure mobile deeplink handshake is not yet enabled in this build. Never enter a seed phrase or private key here.",fontSize=11.sp,color=Green)
-      Text("LIVE TRADING LOCKED · wallet signing requires a separate explicit approval flow.",fontSize=11.sp,color=Red)
+      Text("LIVE TRADING LOCKED · Bloom execution is not connected in this build.",fontSize=11.sp,color=Red)
             Text("Το token μένει μόνο στη μνήμη της εφαρμογής. Μην βάλεις seed phrase ή private key.",fontSize=11.sp,color=Green)
      }}}
-     item { CardBox { Text("Live trading απενεργοποιημένο. Η εφαρμογή χρησιμοποιεί μόνο paper tools που εκθέτει ο server.",color=Red,fontSize=12.sp) } }
+     item { CardBox { Text("Live trading remains locked. Never reuse a token previously embedded in an APK; rotate gateway seat tokens in Render.",color=Red,fontSize=12.sp) } }
     }
    }
   }
