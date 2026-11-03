@@ -1,6 +1,18 @@
 package com.diomaster2d.grokbot
 
 import android.os.Bundle
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlinx.coroutines.delay
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -75,17 +87,37 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
- var activity by remember { mutableStateOf(emptyList<String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
+ var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
  LaunchedEffect(Unit) {
   run {
-   val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim())
+   val base=gateway.trim().removeSuffix("/")
+   val c=DeskClient(base,seat.trim(),token.trim())
    val found=c.connect()
    client=c;tools=found;status="CONNECTED · PAPER"
    message="Αυτόματη σύνδεση επιτυχής · ${found.size} εργαλεία · ${seat.uppercase()}"
-   equity="PAPER DESK";cash="Connected";pnl="--"
-   activity=listOf("Auto-connected to Render · ${found.size} tools loaded · ${seat.uppercase()} seat")
+   equity="10 SOL";cash="10 SOL";pnl="0 SOL"
+   val seats=listOf("chief","scout","risk","whale","sniper","rug","exit","shill","signal","journal")
+   val health=linkedMapOf<String,String>()
+   for (short in seats) {
+    try {
+     val seatClient=if(short==seat.trim()) c else DeskClient(base,short,token.trim())
+     val seatTools=if(short==seat.trim()) found else seatClient.connect()
+     health[short]="ONLINE · ${seatTools.size}"
+    } catch(e:Exception) { health[short]="OFFLINE" }
+   }
+   agentStatuses=health
+   val checks=listOf("exec_positions","portfolio_exposure","portfolio_pnl","risk_halt_status")
+   val reports=mutableListOf<String>()
+   for(name in checks) {
+    if(found.any { it.name==name }) {
+     try { val result=c.call(name,JSONObject()); reports.add("$name · OK") }
+     catch(e:Exception) { reports.add("$name · ERROR") }
+    }
+   }
+   activity=(listOf("AUTO START · 10-seat health sweep complete") + health.map { "${it.key.uppercase()} · ${it.value}" } + reports).take(30)
+   message="Auto diagnostics complete · ${health.count{it.value.startsWith("ONLINE")}}/10 seats online · ${reports.size} checks"
   }
  }
  val tabs=listOf("Home","Agents","Activity","Tools","Rules")
@@ -109,13 +141,12 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      }}
      }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("AGENT NETWORK",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("${tools.size} TOOLS",fontSize=11.sp,color=Green)} }
-     item { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
-      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("CHIEF","Desk orchestrator","CHIEF",Color(0xFFFFC857),Modifier.weight(1f)); AgentCard("SCANNER","Token discovery","SCOUT",Color(0xFF26D6C5),Modifier.weight(1f)) }
-      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("RISK GUARD","Risk & safety veto","RISK",Green,Modifier.weight(1f)); AgentCard("WHALE WATCH","Smart-money analysis","WHALE",Blue,Modifier.weight(1f)) }
-      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("SNIPER","Entry review","SNIPER",Red,Modifier.weight(1f)); AgentCard("RUG CHECK","Post-entry safety","RUG",Color(0xFFFFA34D),Modifier.weight(1f)) }
-      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("EXIT","Position manager","EXIT",Color(0xFF26D6C5),Modifier.weight(1f)); AgentCard("SHILL","Sentiment monitor","SHILL",Purple,Modifier.weight(1f)) }
-      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("SIGNAL","Momentum analysis","SIGNAL",Blue,Modifier.weight(1f)); AgentCard("JOURNAL","Trade records","JOURNAL",Color(0xFFFFC857),Modifier.weight(1f)) }
-     } }
+     item { AgentOrbit(agentStatuses) }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
+      Text("AUTO DIAGNOSTICS",fontSize=13.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text(message,fontSize=11.sp,color=Muted)
+      Text("Read-only checks run automatically on startup. Scanner waits for a verified mint; no automatic orders are sent.",fontSize=10.sp,color=Green)
+     } } }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("RECENT ACTIVITY",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("LEDGER",fontSize=10.sp,color=Green)} }
      if(activity.isEmpty()) item { CardBox { Text(message,fontSize=12.sp,color=Muted) } } else items(activity.take(12)){line->CardBox{Text(line,fontSize=12.sp,color=Color.White)}}
     }
@@ -177,10 +208,41 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         equity="PAPER DESK";cash="Connected";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
       }},enabled=!busy&&gateway.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT DESK")}
       Text(message,fontSize=11.sp,color=Muted)
-      Text("Το token μένει μόνο στη μνήμη της εφαρμογής. Μην βάλεις seed phrase ή private key.",fontSize=11.sp,color=Green)
+      Text("Phantom wallet: secure mobile deeplink handshake is not yet enabled in this build. Never enter a seed phrase or private key here.",fontSize=11.sp,color=Green)
+      Text("LIVE TRADING LOCKED · wallet signing requires a separate explicit approval flow.",fontSize=11.sp,color=Red)
+            Text("Το token μένει μόνο στη μνήμη της εφαρμογής. Μην βάλεις seed phrase ή private key.",fontSize=11.sp,color=Green)
      }}}
      item { CardBox { Text("Live trading απενεργοποιημένο. Η εφαρμογή χρησιμοποιεί μόνο paper tools που εκθέτει ο server.",color=Red,fontSize=12.sp) } }
     }
+   }
+  }
+ }
+}
+@Composable private fun AgentOrbit(statuses:Map<String,String>) {
+ val names=listOf("CHIEF","SCOUT","RISK","WHALE","SNIPER","RUG","EXIT","SHILL","SIGNAL","JOURNAL")
+ val colors=listOf(Color(0xFFFFC857),Color(0xFF26D6C5),Green,Blue,Red,Color(0xFFFFA34D),Color(0xFF26D6C5),Purple,Blue,Color(0xFFFFC857))
+ val transition= rememberInfiniteTransition(label="agent-orbit")
+ val angle by transition.animateFloat(initialValue=0f,targetValue=360f,animationSpec=infiniteRepeatable(tween(18000,easing=FastOutSlowInEasing),RepeatMode.Restart),label="orbit-angle")
+ Box(Modifier.fillMaxWidth().height(292.dp),contentAlignment=Alignment.Center) {
+  Canvas(Modifier.size(250.dp)) {
+   drawCircle(color=Blue.copy(alpha=.12f),radius=size.minDimension*.48f,style=androidx.compose.ui.graphics.drawscope.Stroke(width=1.dp.toPx()))
+   drawCircle(color=Purple.copy(alpha=.18f),radius=size.minDimension*.32f,style=androidx.compose.ui.graphics.drawscope.Stroke(width=1.dp.toPx()))
+  }
+  Column(horizontalAlignment=Alignment.CenterHorizontally) {
+   Text("DioMasteR2D",fontSize=17.sp,fontWeight=FontWeight.Bold,color=Color.White)
+   Text("10 AGENT NETWORK",fontSize=9.sp,color=Green,letterSpacing=1.5.sp)
+   Text("${statuses.values.count{it.startsWith("ONLINE")}} / 10 ONLINE",fontSize=10.sp,color=Muted)
+  }
+  names.forEachIndexed { i,name ->
+   val radians=Math.toRadians((i*36.0+angle-90.0))
+   val radius=112.0
+   val x=(cos(radians)*radius).dp
+   val y=(sin(radians)*radius).dp
+   Column(Modifier.offset(x=x,y=y).width(58.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+    Box(Modifier.size(34.dp).background(colors[i].copy(alpha=if(statuses[name.lowercase()]?.startsWith("ONLINE")==true) .25f else .08f),RoundedCornerShape(50)),contentAlignment=Alignment.Center) {
+     Text("✦",fontSize=18.sp,color=colors[i])
+    }
+    Text(name,fontSize=7.sp,color=if(statuses[name.lowercase()]?.startsWith("ONLINE")==true) Green else Muted,maxLines=1)
    }
   }
  }
