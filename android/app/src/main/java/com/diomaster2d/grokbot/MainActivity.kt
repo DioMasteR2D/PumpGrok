@@ -70,7 +70,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 }
 
 @Composable private fun App(){
- var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("UB5UrkLMaJGhQUoclwRD48-rOgn6hZFfpmSnedu1Q0Szs5yBnZk-4iuyeZSwwVU5") }
+ var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("IyIBZCqnOMIirRWIF-y6gXy8UBarVU75yrbEYTe1raCVGgfxVCX13VXtvFp6H3bw") }
  var tools by remember { mutableStateOf(emptyList<DeskTool>()) }; var client by remember { mutableStateOf<DeskClient?>(null) }
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
@@ -122,6 +122,18 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     1 -> {
      item { Text("PUMPGROK AGENT NETWORK",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      item { CardBox { Text("10 specialist seats · PumpGrok role definitions. Tool access is controlled by the server roster.",fontSize=12.sp,color=Muted) } }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text("ACTIVE AGENT SEAT",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
+      OutlinedTextField(seat,{seat=it.trim().lowercase()},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("chief / scout / risk / whale / sniper / rug / exit / shill / signal / journal")})
+      Button(onClick={run {
+       val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim().lowercase(),token.trim())
+       val found=c.connect()
+       client=c;tools=found;status="CONNECTED · PAPER"
+       message="Connected to ${seat.uppercase()} · ${found.size} permitted tools"
+       activity=listOf("Seat switched to ${seat.uppercase()} · ${found.size} tools loaded")
+      }},enabled=!busy&&seat.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT SELECTED AGENT")}
+      Text("Κάθε seat εμφανίζει μόνο τα εργαλεία που του επιτρέπει το PumpGrok roster.",fontSize=10.sp,color=Muted)
+     } } }
      item { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
       Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("CHIEF","Desk orchestrator","CHIEF",Color(0xFFFFC857),Modifier.weight(1f)); AgentCard("SCOUT","Token discovery","SCOUT",Color(0xFF26D6C5),Modifier.weight(1f)) }
       Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("RISK","Absolute safety gate","RISK",Green,Modifier.weight(1f)); AgentCard("WHALE","Smart-money analyst","WHALE",Blue,Modifier.weight(1f)) }
