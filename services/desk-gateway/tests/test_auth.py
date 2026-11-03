@@ -88,6 +88,38 @@ def test_cross_seat_token_is_403(gateway):  # type: ignore[no-untyped-def]
     assert body["error"]["code"] == "forbidden"
 
 
+def test_shared_token_allows_requested_seat(tmp_path: Any) -> None:
+    """A shared token must not be assigned to an arbitrary last seat."""
+    contracts_dir = default_contracts_dir()
+    shorts = sorted(short_to_seat(contracts_dir).keys())
+    tokens = {short: "one_shared_token" for short in shorts}
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(_refusing_transport))
+    config = GatewayConfig(
+        host="127.0.0.1",
+        port=0,
+        contracts_dir=contracts_dir,
+        data_dir=tmp_path / "data",
+        repo_root=tmp_path,
+        tokens=tokens,
+        ledger_path=tmp_path / "ledger.sqlite",
+    )
+    server = create_server(
+        config,
+        settings=Settings(mode="paper"),
+        clock=WallClock(),
+        http_client=http_client,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    try:
+        status, body = rpc_call(f"http://{host}:{port}", "chief", "tools/list", "one_shared_token")
+        assert status == HTTP_OK, body
+        assert body["result"]["tools"]
+    finally:
+        close_server(server)
+
+
 def test_own_seat_token_proceeds(gateway):  # type: ignore[no-untyped-def]
     base_url, tokens, _contracts, _reg, _manifests = gateway
     status, body = rpc_call(base_url, "scout", "tools/list", tokens["scout"])
