@@ -90,6 +90,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    JSONObject(txt)
   }
  }
+ suspend fun bloomBalances():JSONObject=withContext(Dispatchers.IO) {
+  val req=Request.Builder().url("${base.trimEnd('/')}/bloom/balances").header("Authorization","Bearer $token").get().build()
+  http.newCall(req).execute().use { res ->
+   val txt=res.body?.string().orEmpty()
+   check(res.isSuccessful) { "Wallet balances HTTP ${res.code}: ${txt.take(250)}" }
+   JSONObject(txt)
+  }
+ }
 }
 
 @Composable private fun App(){
