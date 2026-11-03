@@ -26,6 +26,7 @@ import contextlib
 import hmac
 import json
 import logging
+import os
 import re
 import secrets
 import threading
@@ -315,7 +316,7 @@ class _Handler(BaseHTTPRequestHandler):
             ):
                 self._send_json(401, {"error": {"code": "unauthorized", "message": "chief token required"}})
                 return
-            api_key = __import__("os").environ.get("BLOOM_API_KEY", "").strip()
+            api_key = os.environ.get("BLOOM_API_KEY", "").strip()
             if not api_key:
                 self._send_json(503, {"connected": False, "error": "BLOOM_API_KEY is not configured"})
                 return
