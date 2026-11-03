@@ -309,8 +309,19 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  val angle by transition.animateFloat(initialValue=0f,targetValue=360f,animationSpec=infiniteRepeatable(tween(18000,easing=FastOutSlowInEasing),RepeatMode.Restart),label="orbit-angle")
  Box(Modifier.fillMaxWidth().height(292.dp),contentAlignment=Alignment.Center) {
   Canvas(Modifier.size(250.dp)) {
-   drawCircle(color=Blue.copy(alpha=.12f),radius=size.minDimension*.48f,style=androidx.compose.ui.graphics.drawscope.Stroke(width=1.dp.toPx()))
-   drawCircle(color=Purple.copy(alpha=.18f),radius=size.minDimension*.32f,style=androidx.compose.ui.graphics.drawscope.Stroke(width=1.dp.toPx()))
+   val center=androidx.compose.ui.geometry.Offset(size.width/2f,size.height/2f)
+   val radius=size.minDimension*.46f
+   drawCircle(color=Blue.copy(alpha=.16f),radius=radius,center=center,style=androidx.compose.ui.graphics.drawscope.Stroke(width=1.dp.toPx()))
+   drawCircle(color=Purple.copy(alpha=.22f),radius=radius*.68f,center=center,style=androidx.compose.ui.graphics.drawscope.Stroke(width=1.dp.toPx()))
+   for(i in 0 until 10) {
+    val a=Math.toRadians(i*36.0+angle-90.0)
+    val node=androidx.compose.ui.geometry.Offset(center.x+(kotlin.math.cos(a)*radius).toFloat(),center.y+(kotlin.math.sin(a)*radius).toFloat())
+    drawLine(colors[i].copy(alpha=.16f),center,node,strokeWidth=1.dp.toPx())
+    val moving=Math.toRadians(i*36.0-angle*2.0)
+    val dot=androidx.compose.ui.geometry.Offset(center.x+(kotlin.math.cos(moving)*radius*.82f).toFloat(),center.y+(kotlin.math.sin(moving)*radius*.82f).toFloat())
+    drawCircle(colors[i],radius=3.dp.toPx(),center=dot)
+   }
+   drawCircle(color=Purple.copy(alpha=.10f),radius=radius*.42f,center=center)
   }
   Column(horizontalAlignment=Alignment.CenterHorizontally) {
    Text("DioMasteR2D",fontSize=17.sp,fontWeight=FontWeight.Bold,color=Color.White)
@@ -334,6 +345,21 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 @Composable private fun CardBox(content:@Composable ColumnScope.()->Unit){Card(colors=CardDefaults.cardColors(containerColor=Panel),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),content=content)}}
 @Composable private fun Metric(label:String,value:String,color:Color){Column{Text(label,fontSize=10.sp,color=Muted);Text(value,fontSize=17.sp,fontWeight=FontWeight.Bold,color=color)}}
 @Composable private fun AgentCard(name:String,desc:String,id:String,color:Color,modifier:Modifier=Modifier){Card(modifier,colors=CardDefaults.cardColors(containerColor=Panel),shape=RoundedCornerShape(16.dp)){Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(3.dp)){Text("✦",fontSize=22.sp,color=color);Text(name,fontWeight=FontWeight.Bold,fontSize=13.sp);Text(desc,fontSize=10.sp,color=Muted,maxLines=2);Text("AGENT $id",fontSize=9.sp,color=color)}}}
-@Composable private fun EquityChart(){
- Canvas(Modifier.fillMaxWidth().height(125.dp)){val p=Path().apply{moveTo(0f,size.height*.83f);cubicTo(size.width*.18f,size.height*.84f,size.width*.2f,size.height*.45f,size.width*.36f,size.height*.58f);cubicTo(size.width*.5f,size.height*.7f,size.width*.55f,size.height*.3f,size.width*.7f,size.height*.4f);cubicTo(size.width*.82f,size.height*.5f,size.width*.88f,size.height*.12f,size.width,size.height*.2f)};drawPath(p,Green,style=androidx.compose.ui.graphics.drawscope.Stroke(width=3.dp.toPx()));}
+@Composable private fun WalletSparkline(){
+ val transition=rememberInfiniteTransition(label="wallet-chart")
+ val phase by transition.animateFloat(0f,1f,infiniteRepeatable(tween(2400,easing=FastOutSlowInEasing),RepeatMode.Restart),label="chart-flow")
+ Canvas(Modifier.fillMaxWidth().height(82.dp)){
+  val p=Path().apply{
+   moveTo(0f,size.height*.76f)
+   cubicTo(size.width*.14f,size.height*.68f,size.width*.18f,size.height*.3f,size.width*.32f,size.height*.48f)
+   cubicTo(size.width*.46f,size.height*.68f,size.width*.55f,size.height*.22f,size.width*.68f,size.height*.35f)
+   cubicTo(size.width*.82f,size.height*.48f,size.width*.88f,size.height*.12f,size.width,size.height*.18f)
+  }
+  drawPath(p,Green.copy(alpha=.18f),style=androidx.compose.ui.graphics.drawscope.Stroke(width=8.dp.toPx()))
+  drawPath(p,Green,style=androidx.compose.ui.graphics.drawscope.Stroke(width=2.dp.toPx()))
+  val x=size.width*phase
+  drawCircle(Blue,radius=4.dp.toPx(),center=androidx.compose.ui.geometry.Offset(x,size.height*(.72f-.48f*phase)))
+ }
+}
+@Composable private fun EquityChart(){ WalletSparkline() }
 }
