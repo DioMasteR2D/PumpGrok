@@ -325,17 +325,23 @@ class _Handler(BaseHTTPRequestHandler):
         presented = _presented_token(self.headers)
         # Compare as bytes: hmac.compare_digest raises TypeError on non-ASCII str.
         presented_bytes = presented.encode() if presented is not None else None
-        matched: str | None = None
+        matched_any = False
+        matched_path = False
         for seat_short, expected in tokens.items():
-            if presented_bytes is not None and hmac.compare_digest(
+            equal = presented_bytes is not None and hmac.compare_digest(
                 presented_bytes, expected.encode()
-            ):
-                matched = seat_short
-        if matched is None:
+            )
+            matched_any = matched_any or equal
+            # A deployment may intentionally use one shared bearer token for
+            # every seat. In that case, authorize the requested seat rather
+            # than letting dict iteration order select an arbitrary last seat.
+            if seat_short == short:
+                matched_path = equal
+        if matched_path:
+            return None
+        if not matched_any:
             return HTTP_UNAUTHORIZED
-        if matched != short:
-            return HTTP_FORBIDDEN
-        return None
+        return HTTP_FORBIDDEN
 
     def _auth_error_body(self, status: int) -> dict[str, Any]:
         if status == HTTP_UNAUTHORIZED:
