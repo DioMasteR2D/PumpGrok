@@ -308,6 +308,125 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
             return
+        if path == "/bloom/balances":
+            expected = state["tokens"].get("chief")
+            presented = _presented_token(self.headers)
+            if not expected or not presented or not hmac.compare_digest(
+                presented.encode(), expected.encode()
+            ):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief token required"}})
+                return
+            api_key = os.environ.get("BLOOM_API_KEY", "").strip()
+            if not api_key:
+                self._send_json(503, {"error": "BLOOM_API_KEY is not configured"})
+                return
+            rpc_url = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip()
+            try:
+                wallets_response = httpx.get(
+                    "https://eu.solana.bloombot.app/api/v1/wallets",
+                    headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+                    timeout=12.0,
+                )
+                if wallets_response.status_code == 405:
+                    wallets_response = httpx.post(
+                        "https://eu.solana.bloombot.app/api/v1/wallets",
+                        headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json", "Content-Type": "application/json"},
+                        json={}, timeout=12.0,
+                    )
+                wallets_response.raise_for_status()
+                payload = wallets_response.json()
+                wallet_rows = payload.get("data", {}).get("wallets", [])
+                if not isinstance(wallet_rows, list):
+                    raise ValueError("Bloom wallets response has no wallet list")
+                results = []
+                all_mints = {"So11111111111111111111111111111111111111112"}
+                for wallet in wallet_rows:
+                    address = str(wallet.get("address", "")).strip()
+                    if not address:
+                        continue
+                    def rpc_call(method: str, params: list[Any]) -> dict[str, Any]:
+                        response = httpx.post(
+                            rpc_url,
+                            json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                            headers={"Content-Type": "application/json"},
+                            timeout=15.0,
+                        )
+                        response.raise_for_status()
+                        body = response.json()
+                        if body.get("error"):
+                            raise ValueError(f"Solana RPC {method} failed")
+                        return body.get("result", {})
+                    sol_result = rpc_call("getBalance", [address, {"commitment": "confirmed"}])
+                    sol_amount = int(sol_result.get("value", 0)) / 1_000_000_000
+                    tokens = []
+                    for program in (
+                        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                    ):
+                        token_result = rpc_call("getTokenAccountsByOwner", [
+                            address, {"programId": program},
+                            {"encoding": "jsonParsed", "commitment": "confirmed"},
+                        ])
+                        for entry in token_result.get("value", []):
+                            info = entry.get("account", {}).get("data", {}).get("parsed", {}).get("info", {})
+                            amount = info.get("tokenAmount", {})
+                            mint = str(info.get("mint", ""))
+                            ui_amount = float(amount.get("uiAmountString") or 0)
+                            if mint and ui_amount > 0:
+                                tokens.append({"mint": mint, "amount": ui_amount, "decimals": int(amount.get("decimals", 0))})
+                                all_mints.add(mint)
+                    results.append({
+                        "address": address,
+                        "label": wallet.get("label", ""),
+                        "spot_active": bool(wallet.get("spot_active", False)),
+                        "sol": sol_amount,
+                        "tokens": tokens,
+                    })
+                prices: dict[str, Any] = {}
+                mint_list = list(all_mints)
+                for offset in range(0, len(mint_list), 50):
+                    batch = mint_list[offset:offset + 50]
+                    price_headers = {"Accept": "application/json"}
+                    jupiter_key = os.environ.get("JUPITER_API_KEY", "").strip()
+                    if jupiter_key:
+                        price_headers["x-api-key"] = jupiter_key
+                    price_response = httpx.get(
+                        "https://api.jup.ag/price/v3",
+                        params={"ids": ",".join(batch)},
+                        headers=price_headers,
+                        timeout=12.0,
+                    )
+                    if price_response.is_success:
+                        prices.update(price_response.json())
+                total_usd = 0.0
+                sol_mint = "So11111111111111111111111111111111111111112"
+                for wallet in results:
+                    sol_price = prices.get(sol_mint, {}).get("usdPrice")
+                    wallet["sol_usd"] = float(sol_price) * wallet["sol"] if sol_price is not None else None
+                    wallet["token_values"] = []
+                    for token in wallet["tokens"]:
+                        price = prices.get(token["mint"], {}).get("usdPrice")
+                        value = float(price) * token["amount"] if price is not None else None
+                        token["usd_price"] = price
+                        token["usd_value"] = value
+                        wallet["token_values"].append(token)
+                        if value is not None:
+                            total_usd += value
+                    if wallet["sol_usd"] is not None:
+                        total_usd += wallet["sol_usd"]
+                self._send_json(200, {
+                    "connected": True,
+                    "source": "Bloom wallet discovery + Solana confirmed RPC + Jupiter Price V3",
+                    "commitment": "confirmed",
+                    "wallets": results,
+                    "total_usd": total_usd,
+                    "sol_usd_price": prices.get(sol_mint, {}).get("usdPrice"),
+                    "pricing_note": "Missing token prices are unknown, not zero.",
+                })
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                log.warning("Bloom wallet balance read failed: %s", type(exc).__name__)
+                self._send_json(502, {"connected": False, "error": "Wallet balance read failed", "detail": str(exc)[:180]})
+            return
         if path == "/bloom/status":
             expected = state["tokens"].get("chief")
             presented = _presented_token(self.headers)
