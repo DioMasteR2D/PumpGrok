@@ -31,6 +31,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.platform.LocalContext
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -90,7 +93,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 }
 
 @Composable private fun App(){
- var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("") }
+ val context = LocalContext.current
+ val securePrefs = remember(context) {
+  val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+  EncryptedSharedPreferences.create(context, "grokbot_secure_prefs", masterKey,
+   EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+   EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+ }
+ var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf(securePrefs.getString("gateway_token", "") ?: "") }
  var tools by remember { mutableStateOf(emptyList<DeskTool>()) }; var client by remember { mutableStateOf<DeskClient?>(null) }
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
@@ -104,6 +114,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    val base=gateway.trim().removeSuffix("/")
    val c=DeskClient(base,seat.trim(),token.trim())
    val found=c.connect()
+   securePrefs.edit().putString("gateway_token", token.trim()).apply()
    client=c;tools=found;status="CONNECTED · LIVE LOCKED"
    message="Αυτόματη σύνδεση επιτυχής · ${found.size} εργαλεία · ${seat.uppercase()}"
    equity="--";cash="--";pnl="--"
@@ -117,6 +128,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     } catch(e:Exception) { health[short]="OFFLINE" }
    }
    agentStatuses=health
+   try { bloomReport=c.bloomStatus().toString(2) } catch(e:Exception) { bloomReport="Bloom check failed: ${e.message ?: "connection error"}" }
    val checks=listOf("exec_positions","portfolio_exposure","portfolio_pnl","risk_halt_status")
    val reports=mutableListOf<String>()
    for(name in checks) {
@@ -145,8 +157,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Text(equity,fontSize=36.sp,fontWeight=FontWeight.Bold,color=Color.White)
       Text("No verified wallet balance loaded",fontSize=11.sp,color=Muted)
       Spacer(Modifier.height(10.dp));Row(horizontalArrangement=Arrangement.spacedBy(18.dp)){Metric("P&L",pnl,Green);Metric("CASH",cash,Color.White)}
-      Spacer(Modifier.height(12.dp));EquityChart()
-      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("LIVE",color=Green,fontSize=12.sp,fontWeight=FontWeight.Bold);Text("1H     4H     1D     1W     ALL",color=Green,fontSize=11.sp)}
+      Spacer(Modifier.height(12.dp));Text("Chart waiting for verified market and wallet data.",fontSize=11.sp,color=Muted)
      }}
      }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("AGENT NETWORK",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("${tools.size} TOOLS",fontSize=11.sp,color=Green)} }
@@ -177,6 +188,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Button(onClick={run {
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim().lowercase(),token.trim())
        val found=c.connect()
+       securePrefs.edit().putString("gateway_token", token.trim()).apply()
        client=c;tools=found;status="CONNECTED · PAPER"
        message="Connected to ${seat.uppercase()} · ${found.size} permitted tools"
        activity=listOf("Seat switched to ${seat.uppercase()} · ${found.size} tools loaded")
@@ -222,6 +234,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Button(onClick={run{
        require(gateway.startsWith("https://")){"Χρειάζεται ασφαλής HTTPS διεύθυνση gateway."}
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim());val found=c.connect()
+       securePrefs.edit().putString("gateway_token", token.trim()).apply()
        client=c;tools=found;status="CONNECTED · PAPER";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία για το seat ${seat.uppercase()}."
         bloomReport=c.bloomStatus().toString(2)
         equity="--";cash="--";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
