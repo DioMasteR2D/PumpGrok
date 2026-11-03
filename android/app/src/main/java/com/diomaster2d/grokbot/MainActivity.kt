@@ -33,7 +33,9 @@ import java.util.concurrent.TimeUnit
 
 private val Bg = Color(0xFF08090D)
 private val Panel = Color(0xFF151820)
-private val Red = Color(0xFFFF4058)
+private val Red = Color(0xFF9B5CFF)
+private val Blue = Color(0xFF16C8FF)
+private val Purple = Color(0xFF6C4DFF)
 private val Green = Color(0xFF20D889)
 private val Muted = Color(0xFF9299A8)
 
@@ -86,9 +88,9 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    activity=listOf("Auto-connected to Render · ${found.size} tools loaded · ${seat.uppercase()} seat")
   }
  }
- val tabs=listOf("Home","Agents","Activity","Rules")
+ val tabs=listOf("Home","Agents","Activity","Tools","Rules")
  Scaffold(containerColor=Bg,bottomBar={NavigationBar(containerColor=Color(0xFF101219),contentColor=Color.White){
-  tabs.forEachIndexed { i,s -> NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Text(listOf("⌂","✣","⌁","⚙")[i],fontSize=20.sp)},label={Text(s,fontSize=10.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Red,indicatorColor=Color(0xFF35202A),selectedTextColor=Color.White,unselectedTextColor=Muted)) }
+  tabs.forEachIndexed { i,s -> NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Text(listOf("⌂","✣","⌁","▦","⚙")[i],fontSize=20.sp)},label={Text(s,fontSize=10.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Red,indicatorColor=Color(0xFF35202A),selectedTextColor=Color.White,unselectedTextColor=Muted)) }
  }}) { pad ->
   LazyColumn(Modifier.fillMaxSize().padding(pad).background(Bg).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(top=18.dp,bottom=24.dp)){
    item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
@@ -107,31 +109,48 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      }}
      }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("AGENT NETWORK",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("${tools.size} TOOLS",fontSize=11.sp,color=Green)} }
-     item { Row(horizontalArrangement=Arrangement.spacedBy(9.dp)){AgentCard("SCANNER","Token discovery","SCOUT",Color(0xFF26D6C5));AgentCard("ANALYST","Signal review","SIGNAL",Red);AgentCard("RISK GUARD","Risk veto","RISK",Green)} }
+     item { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("CHIEF","Desk orchestrator","CHIEF",Color(0xFFFFC857),Modifier.weight(1f)); AgentCard("SCANNER","Token discovery","SCOUT",Color(0xFF26D6C5),Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("RISK GUARD","Risk & safety veto","RISK",Green,Modifier.weight(1f)); AgentCard("WHALE WATCH","Smart-money analysis","WHALE",Blue,Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("SNIPER","Entry review","SNIPER",Red,Modifier.weight(1f)); AgentCard("RUG CHECK","Post-entry safety","RUG",Color(0xFFFFA34D),Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("EXIT","Position manager","EXIT",Color(0xFF26D6C5),Modifier.weight(1f)); AgentCard("SHILL","Sentiment monitor","SHILL",Purple,Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("SIGNAL","Momentum analysis","SIGNAL",Blue,Modifier.weight(1f)); AgentCard("JOURNAL","Trade records","JOURNAL",Color(0xFFFFC857),Modifier.weight(1f)) }
+     } }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("RECENT ACTIVITY",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("LEDGER",fontSize=10.sp,color=Green)} }
      if(activity.isEmpty()) item { CardBox { Text(message,fontSize=12.sp,color=Muted) } } else items(activity.take(12)){line->CardBox{Text(line,fontSize=12.sp,color=Color.White)}}
     }
     1 -> {
-     item { Text("AGENTS & TOOLS",fontSize=20.sp,fontWeight=FontWeight.Bold) }
-     if(tools.isEmpty()) item { CardBox { Text("Δεν έχουν φορτωθεί εργαλεία. Συνδέσου πρώτα στο gateway.",color=Muted) } }
-      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-       Text("TOOL CONSOLE",fontSize=14.sp,fontWeight=FontWeight.Bold,color=Red)
-       OutlinedTextField(selectedTool,{selectedTool=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Tool name")})
-       OutlinedTextField(toolArgs,{toolArgs=it},modifier=Modifier.fillMaxWidth(),minLines=3,label={Text("Arguments · JSON")})
-       Button(onClick={run {
-        val c=client ?: error("Συνδέσου πρώτα στο Gateway")
-        val result=c.call(selectedTool.trim(),JSONObject(toolArgs))
-        toolOutput=result.toString()
-        activity=(listOf("Tool: $selectedTool",toolOutput)+activity).take(30)
-       }},enabled=!busy&&client!=null&&selectedTool.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"RUNNING..." else "RUN PAPER TOOL")}
-       if(toolOutput.isNotBlank()) Text(toolOutput,fontSize=11.sp,color=Green)
-      }}}
-      items(tools){t->CardBox{Column(verticalArrangement=Arrangement.spacedBy(5.dp)){Text(t.name,color=Green,fontWeight=FontWeight.Bold,modifier=Modifier.clickable{selectedTool=t.name});Text(t.description,color=Muted,fontSize=12.sp)}}}
+     item { Text("PUMPGROK AGENT NETWORK",fontSize=20.sp,fontWeight=FontWeight.Bold) }
+     item { CardBox { Text("10 specialist seats · PumpGrok role definitions. Tool access is controlled by the server roster.",fontSize=12.sp,color=Muted) } }
+     item { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("CHIEF","Desk orchestrator","CHIEF",Color(0xFFFFC857),Modifier.weight(1f)); AgentCard("SCOUT","Token discovery","SCOUT",Color(0xFF26D6C5),Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("RISK","Absolute safety gate","RISK",Green,Modifier.weight(1f)); AgentCard("WHALE","Smart-money analyst","WHALE",Blue,Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("SNIPER","Entry specialist","SNIPER",Red,Modifier.weight(1f)); AgentCard("RUG","Rug safety monitor","RUG",Color(0xFFFFA34D),Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("EXIT","Position manager","EXIT",Color(0xFF26D6C5),Modifier.weight(1f)); AgentCard("SHILL","Sentiment analyst","SHILL",Purple,Modifier.weight(1f)) }
+      Row(horizontalArrangement=Arrangement.spacedBy(9.dp)) { AgentCard("SIGNAL","Momentum scorer","SIGNAL",Blue,Modifier.weight(1f)); AgentCard("JOURNAL","Trade journal","JOURNAL",Color(0xFFFFC857),Modifier.weight(1f)) }
+     } }
     }
     2 -> {
      item { Text("ACTIVITY & LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      if(activity.isEmpty()) item { CardBox { Text("Δεν υπάρχουν δεδομένα ledger μέχρι να συνδεθεί ο server.",color=Muted) } }
      items(activity){line->CardBox{Text(line,fontSize=12.sp)}}
+    }
+    3 -> {
+     item { Text("PUMPGROK TOOLS · ${tools.size}",fontSize=20.sp,fontWeight=FontWeight.Bold) }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text("TOOL CONSOLE",fontSize=14.sp,fontWeight=FontWeight.Bold,color=Red)
+      OutlinedTextField(selectedTool,{selectedTool=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Selected server tool")})
+      OutlinedTextField(toolArgs,{toolArgs=it},modifier=Modifier.fillMaxWidth(),minLines=3,label={Text("Arguments · JSON")})
+      Button(onClick={run {
+       val c=client ?: error("Συνδέσου πρώτα στο Gateway")
+       val result=c.call(selectedTool.trim(),JSONObject(toolArgs))
+       toolOutput=result.toString()
+       activity=(listOf("Tool: $selectedTool",toolOutput)+activity).take(30)
+      }},enabled=!busy&&client!=null&&selectedTool.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"RUNNING..." else "RUN SELECTED TOOL")}
+      if(toolOutput.isNotBlank()) Text(toolOutput,fontSize=11.sp,color=Green)
+     } } }
+     if(tools.isEmpty()) item { CardBox { Text("Δεν φορτώθηκαν εργαλεία. Έλεγξε τη σύνδεση από Rules.",color=Muted) } }
+     items(tools){t->CardBox { Column(Modifier.fillMaxWidth().clickable { selectedTool=t.name; toolArgs="{}"; toolOutput="" },verticalArrangement=Arrangement.spacedBy(5.dp)) { Text(t.name,color=Green,fontWeight=FontWeight.Bold); Text(t.description,color=Muted,fontSize=12.sp); Text("TAP TO SELECT",fontSize=9.sp,color=Blue) } } }
     }
     else -> {
      item { Text("DESK CONNECTION",fontSize=20.sp,fontWeight=FontWeight.Bold) }
@@ -156,7 +175,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 }
 @Composable private fun CardBox(content:@Composable ColumnScope.()->Unit){Card(colors=CardDefaults.cardColors(containerColor=Panel),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),content=content)}}
 @Composable private fun Metric(label:String,value:String,color:Color){Column{Text(label,fontSize=10.sp,color=Muted);Text(value,fontSize=17.sp,fontWeight=FontWeight.Bold,color=color)}}
-@Composable private fun AgentCard(name:String,desc:String,id:String,color:Color){Card(Modifier.width(155.dp),colors=CardDefaults.cardColors(containerColor=Panel),shape=RoundedCornerShape(16.dp)){Column(Modifier.padding(14.dp)){Text("✦",fontSize=24.sp,color=color);Text(name,fontWeight=FontWeight.Bold);Text(desc,fontSize=10.sp,color=Muted);Text("AGENT $id",fontSize=9.sp,color=color)}}}
+@Composable private fun AgentCard(name:String,desc:String,id:String,color:Color,modifier:Modifier=Modifier){Card(modifier,colors=CardDefaults.cardColors(containerColor=Panel),shape=RoundedCornerShape(16.dp)){Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(3.dp)){Text("✦",fontSize=22.sp,color=color);Text(name,fontWeight=FontWeight.Bold,fontSize=13.sp);Text(desc,fontSize=10.sp,color=Muted,maxLines=2);Text("AGENT $id",fontSize=9.sp,color=color)}}}
 @Composable private fun EquityChart(){
  Canvas(Modifier.fillMaxWidth().height(125.dp)){val p=Path().apply{moveTo(0f,size.height*.83f);cubicTo(size.width*.18f,size.height*.84f,size.width*.2f,size.height*.45f,size.width*.36f,size.height*.58f);cubicTo(size.width*.5f,size.height*.7f,size.width*.55f,size.height*.3f,size.width*.7f,size.height*.4f);cubicTo(size.width*.82f,size.height*.5f,size.width*.88f,size.height*.12f,size.width,size.height*.2f)};drawPath(p,Green,style=androidx.compose.ui.graphics.drawscope.Stroke(width=3.dp.toPx()));}
 }
