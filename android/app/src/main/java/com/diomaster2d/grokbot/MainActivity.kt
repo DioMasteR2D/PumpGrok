@@ -79,6 +79,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
   return if(arr==null) emptyList() else (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { DeskTool(it.optString("name"),it.optString("description"),it.optJSONObject("inputSchema")?:JSONObject()) } }
  }
  suspend fun call(name:String,args:JSONObject=JSONObject()):JSONObject=rpc("tools/call",JSONObject().put("name",name).put("arguments",args)).optJSONObject("result")?:JSONObject()
+ suspend fun bloomStatus():JSONObject=withContext(Dispatchers.IO) {
+  val req=Request.Builder().url("${base.trimEnd('/')}/bloom/status").header("Authorization","Bearer $token").get().build()
+  http.newCall(req).execute().use { res ->
+   val txt=res.body?.string().orEmpty()
+   check(res.isSuccessful) { "Bloom status HTTP ${res.code}: ${txt.take(250)}" }
+   JSONObject(txt)
+  }
+ }
 }
 
 @Composable private fun App(){
@@ -87,6 +95,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
+ var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
  var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
@@ -142,6 +151,15 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("AGENT NETWORK",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("${tools.size} TOOLS",fontSize=11.sp,color=Green)} }
      item { AgentOrbit(agentStatuses) }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text("BLOOM WALLET · READ ONLY",fontSize=13.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text(bloomReport,fontSize=10.sp,color=Color.White)
+      Button(onClick={run {
+       val c=client ?: error("Συνδέσου πρώτα στο Gateway")
+       bloomReport=c.bloomStatus().toString(2)
+      }},enabled=!busy&&client!=null,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CHECKING..." else "REFRESH BLOOM BALANCE")}
+      Text("Read-only wallet discovery. No orders are sent from this screen.",fontSize=10.sp,color=Muted)
+     }} }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
       Text("AUTO DIAGNOSTICS",fontSize=13.sp,fontWeight=FontWeight.Bold,color=Blue)
       Text(message,fontSize=11.sp,color=Muted)
@@ -205,7 +223,8 @@ class DeskClient(private val base:String,private val seat:String,private val tok
        require(gateway.startsWith("https://")){"Χρειάζεται ασφαλής HTTPS διεύθυνση gateway."}
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim());val found=c.connect()
        client=c;tools=found;status="CONNECTED · PAPER";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία για το seat ${seat.uppercase()}."
-        equity="PAPER DESK";cash="Connected";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
+        bloomReport=c.bloomStatus().toString(2)
+        equity="--";cash="--";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
       }},enabled=!busy&&gateway.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT DESK")}
       Text(message,fontSize=11.sp,color=Muted)
       Text("Phantom wallet: secure mobile deeplink handshake is not yet enabled in this build. Never enter a seed phrase or private key here.",fontSize=11.sp,color=Green)
