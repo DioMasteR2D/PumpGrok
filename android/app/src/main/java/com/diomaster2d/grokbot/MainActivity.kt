@@ -362,4 +362,3 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  }
 }
 @Composable private fun EquityChart(){ WalletSparkline() }
-}
