@@ -180,14 +180,48 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("AGENT NETWORK",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("${tools.size} TOOLS",fontSize=11.sp,color=Green)} }
      item { AgentOrbit(agentStatuses) }
-     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-      Text("BLOOM WALLET · READ ONLY",fontSize=13.sp,fontWeight=FontWeight.Bold,color=Blue)
-      Text(bloomReport,fontSize=10.sp,color=Color.White)
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
+      Text("BLOOM WALLET · VERIFIED BALANCES",fontSize=13.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text(walletBalanceMessage,fontSize=10.sp,color=Muted)
+      val wallets=walletBalance?.optJSONArray("wallets")
+      if(wallets==null || wallets.length()==0) {
+       Text("No wallet balance loaded yet.",fontSize=12.sp,color=Muted)
+      } else {
+       for(w in 0 until wallets.length()) {
+        val wallet=wallets.optJSONObject(w) ?: continue
+        val address=wallet.optString("address")
+        Text("${wallet.optString("label","Wallet")} · ${if(address.length>14) address.take(6)+"…"+address.takeLast(5) else address}",fontSize=11.sp,color=Color.White,fontWeight=FontWeight.Bold)
+        Text(String.format(java.util.Locale.US,"%.6f SOL",wallet.optDouble("sol",0.0)),fontSize=20.sp,color=Green,fontWeight=FontWeight.Bold)
+        val solUsd=wallet.optDouble("sol_usd",Double.NaN)
+        Text(if(solUsd.isFinite()) "SOL value: $"+String.format(java.util.Locale.US,"%.2f",solUsd) else "SOL USD price unavailable",fontSize=10.sp,color=Muted)
+        val tokens=wallet.optJSONArray("tokens")
+        if(tokens!=null) for(t in 0 until tokens.length()) {
+         val asset=tokens.optJSONObject(t) ?: continue
+         val mint=asset.optString("mint")
+         val value=asset.optDouble("usd_value",Double.NaN)
+         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+          Text(mint.take(5)+"…"+mint.takeLast(4)+" · "+String.format(java.util.Locale.US,"%.4f",asset.optDouble("amount",0.0)),fontSize=10.sp,color=Color.White)
+          Text(if(value.isFinite()) "$"+String.format(java.util.Locale.US,"%.2f",value) else "Price N/A",fontSize=10.sp,color=if(value.isFinite())Green else Muted)
+         }
+        }
+       }
+       val total=walletBalance?.optDouble("total_usd",Double.NaN) ?: Double.NaN
+       Text(if(total.isFinite()) "TOTAL VERIFIED VALUE · $"+String.format(java.util.Locale.US,"%.2f",total) else "TOTAL USD VALUE · NOT AVAILABLE",fontSize=16.sp,color=Green,fontWeight=FontWeight.Bold)
+       WalletSparkline()
+      }
+      Text("Bloom wallet list + confirmed Solana RPC balances + Jupiter indicative USD prices.",fontSize=10.sp,color=Muted)
       Button(onClick={run {
        val c=client ?: error("Συνδέσου πρώτα στο Gateway")
        bloomReport=c.bloomStatus().toString(2)
-      }},enabled=!busy&&client!=null,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CHECKING..." else "REFRESH BLOOM BALANCE")}
-      Text("Read-only wallet discovery. No orders are sent from this screen.",fontSize=10.sp,color=Muted)
+       walletBalance=c.bloomBalances()
+       walletBalanceMessage="Updated just now · confirmed chain state"
+       val total=walletBalance?.optDouble("total_usd",Double.NaN) ?: Double.NaN
+       equity=if(total.isFinite()) "$"+String.format(java.util.Locale.US,"%.2f",total) else "USD price unavailable"
+       val first=walletBalance?.optJSONArray("wallets")?.optJSONObject(0)
+       cash=if(first!=null) String.format(java.util.Locale.US,"%.4f SOL",first.optDouble("sol",0.0)) else "--"
+       activity=(listOf("WALLET REFRESH · on-chain balances updated") + activity).take(30)
+      }},enabled=!busy&&client!=null,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"REFRESHING..." else "REFRESH BLOOM BALANCE")}
+      Text("READ ONLY · No orders are sent from this screen.",fontSize=10.sp,color=Muted)
      }} }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(5.dp)) {
       Text("AUTO DIAGNOSTICS",fontSize=13.sp,fontWeight=FontWeight.Bold,color=Blue)
