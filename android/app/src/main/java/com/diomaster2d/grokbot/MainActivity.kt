@@ -68,7 +68,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 }
 
 @Composable private fun App(){
- var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("") }
+ var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("UB5UrkLMaJGhQUoclwRD48-rOgn6hZFfpmSnedu1Q0Szs5yBnZk-4iuyeZSwwVU5") }
  var tools by remember { mutableStateOf(emptyList<DeskTool>()) }; var client by remember { mutableStateOf<DeskClient?>(null) }
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
@@ -76,6 +76,16 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var activity by remember { mutableStateOf(emptyList<String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
+ LaunchedEffect(Unit) {
+  run {
+   val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim())
+   val found=c.connect()
+   client=c;tools=found;status="CONNECTED · PAPER"
+   message="Αυτόματη σύνδεση επιτυχής · ${found.size} εργαλεία · ${seat.uppercase()}"
+   equity="PAPER DESK";cash="Connected";pnl="--"
+   activity=listOf("Auto-connected to Render · ${found.size} tools loaded · ${seat.uppercase()} seat")
+  }
+ }
  val tabs=listOf("Home","Agents","Activity","Rules")
  Scaffold(containerColor=Bg,bottomBar={NavigationBar(containerColor=Color(0xFF101219),contentColor=Color.White){
   tabs.forEachIndexed { i,s -> NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Text(listOf("⌂","✣","⌁","⚙")[i],fontSize=20.sp)},label={Text(s,fontSize=10.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Red,indicatorColor=Color(0xFF35202A),selectedTextColor=Color.White,unselectedTextColor=Muted)) }
