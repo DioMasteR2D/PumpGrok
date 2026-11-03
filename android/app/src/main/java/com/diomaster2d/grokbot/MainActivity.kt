@@ -104,7 +104,19 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     1 -> {
      item { Text("AGENTS & TOOLS",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      if(tools.isEmpty()) item { CardBox { Text("Δεν έχουν φορτωθεί εργαλεία. Συνδέσου πρώτα στο gateway.",color=Muted) } }
-     items(tools){t->CardBox{Column(verticalArrangement=Arrangement.spacedBy(5.dp)){Text(t.name,color=Green,fontWeight=FontWeight.Bold);Text(t.description,color=Muted,fontSize=12.sp)}}}
+      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+       Text("TOOL CONSOLE",fontSize=14.sp,fontWeight=FontWeight.Bold,color=Red)
+       OutlinedTextField(selectedTool,{selectedTool=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Tool name")})
+       OutlinedTextField(toolArgs,{toolArgs=it},modifier=Modifier.fillMaxWidth(),minLines=3,label={Text("Arguments · JSON")})
+       Button(onClick={run {
+        val c=client ?: error("Συνδέσου πρώτα στο Gateway")
+        val result=c.call(selectedTool.trim(),JSONObject(toolArgs))
+        toolOutput=result.toString()
+        activity=(listOf("Tool: $selectedTool",toolOutput)+activity).take(30)
+       }},enabled=!busy&&client!=null&&selectedTool.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"RUNNING..." else "RUN PAPER TOOL")}
+       if(toolOutput.isNotBlank()) Text(toolOutput,fontSize=11.sp,color=Green)
+      }}}
+      items(tools){t->CardBox{Column(verticalArrangement=Arrangement.spacedBy(5.dp)){Text(t.name,color=Green,fontWeight=FontWeight.Bold,modifier=Modifier.clickable{selectedTool=t.name});Text(t.description,color=Muted,fontSize=12.sp)}}}
     }
     2 -> {
      item { Text("ACTIVITY & LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
@@ -121,12 +133,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
        require(gateway.startsWith("https://")){"Χρειάζεται ασφαλής HTTPS διεύθυνση gateway."}
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim());val found=c.connect()
        client=c;tools=found;status="CONNECTED · PAPER";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία για το seat ${seat.uppercase()}."
-       val exp=runCatching{c.call("portfolio_exposure")}.getOrNull()
-       val pn=runCatching{c.call("portfolio_pnl",JSONObject().put("window","day"))}.getOrNull()
-       val led=runCatching{c.call("portfolio_ledger_read",JSONObject().put("limit",20))}.getOrNull()
-       if(exp!=null){equity=exp.toString();cash="paper"}
-       if(pn!=null)pnl=pn.toString()
-       if(led!=null)activity=listOf(led.toString())
+        equity="PAPER DESK";cash="Connected";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
       }},enabled=!busy&&gateway.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT DESK")}
       Text(message,fontSize=11.sp,color=Muted)
       Text("Το token μένει μόνο στη μνήμη της εφαρμογής. Μην βάλεις seed phrase ή private key.",fontSize=11.sp,color=Green)
