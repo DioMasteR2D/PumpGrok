@@ -68,12 +68,12 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 }
 
 @Composable private fun App(){
- var gateway by remember { mutableStateOf("") }; var seat by remember { mutableStateOf("risk") }; var token by remember { mutableStateOf("") }
+ var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf("") }
  var tools by remember { mutableStateOf(emptyList<DeskTool>()) }; var client by remember { mutableStateOf<DeskClient?>(null) }
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
- var activity by remember { mutableStateOf(emptyList<String>()) }
+ var activity by remember { mutableStateOf(emptyList<String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
  val tabs=listOf("Home","Agents","Activity","Rules")
@@ -120,7 +120,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Button(onClick={run{
        require(gateway.startsWith("https://")){"Χρειάζεται ασφαλής HTTPS διεύθυνση gateway."}
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim());val found=c.connect()
-       client=c;tools=found;status="CONNECTED · PAPER";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία."
+       client=c;tools=found;status="CONNECTED · PAPER";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία για το seat ${seat.uppercase()}."
        val exp=runCatching{c.call("portfolio_exposure")}.getOrNull()
        val pn=runCatching{c.call("portfolio_pnl",JSONObject().put("window","day"))}.getOrNull()
        val led=runCatching{c.call("portfolio_ledger_read",JSONObject().put("limit",20))}.getOrNull()
