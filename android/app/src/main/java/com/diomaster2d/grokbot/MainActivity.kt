@@ -114,6 +114,8 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
  var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
+ var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
+ var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }
  var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
@@ -136,7 +138,15 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     } catch(e:Exception) { health[short]="OFFLINE" }
    }
    agentStatuses=health
-   try { bloomReport=c.bloomStatus().toString(2) } catch(e:Exception) { bloomReport="Bloom check failed: ${e.message ?: "connection error"}" }
+   try {
+    bloomReport=c.bloomStatus().toString(2)
+    walletBalance=c.bloomBalances()
+    walletBalanceMessage="Confirmed on-chain balances · Jupiter USD pricing"
+    val total=walletBalance?.optDouble("total_usd", Double.NaN) ?: Double.NaN
+    equity=if(total.isFinite()) "$"+String.format(java.util.Locale.US,"%.2f",total) else "USD price unavailable"
+    val first=walletBalance?.optJSONArray("wallets")?.optJSONObject(0)
+    cash=if(first!=null) String.format(java.util.Locale.US,"%.4f SOL",first.optDouble("sol",0.0)) else "--"
+   } catch(e:Exception) { walletBalanceMessage="Balance read failed: ${e.message ?: "unknown error"}" }
    val checks=listOf("exec_positions","portfolio_exposure","portfolio_pnl","risk_halt_status")
    val reports=mutableListOf<String>()
    for(name in checks) {
