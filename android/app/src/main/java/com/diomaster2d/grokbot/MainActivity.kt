@@ -163,7 +163,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     try {
      val seatClient=if(short==seat.trim()) c else DeskClient(base,short,token.trim())
      val seatTools=if(short==seat.trim()) found else seatClient.connect()
-     health[short]="ONLINE · ${seatTools.size}"
+     health[short]="CONNECTED · ${seatTools.size} tools"
     } catch(e:Exception) { health[short]="OFFLINE" }
    }
    agentStatuses=health
@@ -184,8 +184,25 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      catch(e:Exception) { reports.add("$name · ERROR") }
     }
    }
-   activity=(listOf("AUTO START · 10-seat health sweep complete") + health.map { "${it.key.uppercase()} · ${it.value}" } + reports).take(30)
-   message="Auto diagnostics complete · ${health.count{it.value.startsWith("ONLINE")}}/10 seats online · ${reports.size} checks"
+   activity=(listOf("AUTO START · 10-seat connection sweep complete") + health.map { "${it.key.uppercase()} · ${it.value}" } + reports).take(30)
+   message="Auto diagnostics complete · ${health.count{it.value.startsWith("CONNECTED")}}/10 seats online · ${reports.size} checks"
+  }
+ }
+ LaunchedEffect(client) {
+  val activeClient = client ?: return@LaunchedEffect
+  while (true) {
+   try {
+    val snapshot = activeClient.marketHome()
+    homeMarketData = snapshot
+    val count = snapshot.optInt("candidate_count", snapshot.optJSONArray("candidates")?.length() ?: 0)
+    val providers = snapshot.optJSONArray("providers")
+    val healthy = if (providers == null) 0 else (0 until providers.length()).count { providers.optJSONObject(it)?.optString("status") in listOf("OK", "CONNECTED") }
+    val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+    homeMarketMessage = if (count > 0) "MARKET FEED · $count candidates · $healthy providers · $stamp" else "NO MARKET DATA · $healthy providers responding"
+   } catch (e: Exception) {
+    homeMarketMessage = "MARKET FEED ERROR · " + (e.message ?: "connection unavailable")
+   }
+   delay(25_000)
   }
  }
  LaunchedEffect(client, tab, marketQuery) {
@@ -194,7 +211,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    delay(600)
    while (true) {
     try {
-     val snapshot = if (marketQuery.isNotBlank()) activeClient.marketSearch(marketQuery) else activeClient.marketCandidates()
+     val snapshot = if (marketQuery.isNotBlank()) activeClient.marketSearch(marketQuery) else activeClient.marketHome()
      marketData = snapshot
      val count = snapshot.optInt("candidate_count", snapshot.optJSONArray("candidates")?.length() ?: 0)
      val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
@@ -266,7 +283,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      item { AgentOrbit(agentStatuses) }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
       Column { Text("LIVE SOLANA MARKET",fontSize=18.sp,fontWeight=FontWeight.Bold); Text("TRENDING · NEW PAIRS · BOT DECISIONS",fontSize=9.sp,color=Muted,letterSpacing=1.sp) }
-      Text("● LIVE",fontSize=10.sp,color=Green)
+      Text(if ((homeMarketData?.optInt("candidate_count") ?: 0) > 0) "● LIVE" else "● WAITING",fontSize=10.sp,color=if ((homeMarketData?.optInt("candidate_count") ?: 0) > 0) Green else Muted)
      } }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
       Text(homeMarketMessage,fontSize=10.sp,color=Muted)
