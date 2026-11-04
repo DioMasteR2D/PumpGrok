@@ -38,7 +38,7 @@ import httpx
 from pydantic import ValidationError
 
 from desk_gateway.config import GatewayConfig
-from desk_gateway.market_scanner import scan_market
+from desk_gateway.market_scanner import scan_market, search_market
 from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import (
     default_contracts_dir,
@@ -332,6 +332,29 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
             return
+        if path == "/market/search":
+            expected = state["tokens"].get("scout")
+            presented = _presented_token(self.headers)
+            if not expected or not presented or not hmac.compare_digest(presented.encode(), expected.encode()):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "scout token required"}})
+                return
+            try:
+                from urllib.parse import parse_qs, urlsplit
+                query = parse_qs(urlsplit(self.path).query)
+                term = query.get("q", [""])[0]
+                limit = int(query.get("limit", ["20"])[0])
+                result = search_market(term, limit=limit)
+                self._send_json(200, result)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+            except httpx.HTTPError:
+                log.exception("market token search provider failed")
+                self._send_json(502, {"error": "Token search provider unavailable"})
+            except Exception:
+                log.exception("market token search failed")
+                self._send_json(502, {"error": "Market search unavailable"})
+            return
+
         if path == "/market/candidates":
             expected = state["tokens"].get("scout")
             presented = _presented_token(self.headers)
