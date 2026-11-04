@@ -171,6 +171,60 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    message="Auto diagnostics complete · ${health.count{it.value.startsWith("ONLINE")}}/10 seats online · ${reports.size} checks"
   }
  }
+ LaunchedEffect(client, tab) {
+  val activeClient = client ?: return@LaunchedEffect
+  if (tab == 5) {
+   while (true) {
+    try {
+     val snapshot = activeClient.marketCandidates()
+     marketData = snapshot
+     val count = snapshot.optInt("candidate_count", snapshot.optJSONArray("candidates")?.length() ?: 0)
+     val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+     marketMessage = "LIVE SCAN · " + count + " candidates · refreshed " + stamp
+     delay(25_000)
+    } catch (e: Exception) { marketMessage = "SCANNER ERROR · " + (e.message ?: "connection unavailable"); delay(12_000) }
+   }
+  }
+  if (tab == 2) {
+   while (true) {
+    try {
+     val ledgerClient = DeskClient(gateway.trim().removeSuffix("/"), "risk", token.trim())
+     val riskTools = ledgerClient.connect()
+     if (riskTools.any { it.name == "portfolio_ledger_read" }) {
+      val response = ledgerClient.call("portfolio_ledger_read", JSONObject().put("limit", 100))
+      val raw = response.optJSONArray("content")?.optJSONObject(0)?.optString("text").orEmpty()
+      if (raw.isNotBlank()) {
+       val events = JSONObject(raw).optJSONArray("events") ?: org.json.JSONArray()
+       val rows = mutableListOf<String>()
+       for (i in 0 until events.length()) {
+        val event = events.optJSONObject(i) ?: continue
+        val payload = event.optJSONObject("payload") ?: JSONObject()
+        val type = event.optString("type", "Event")
+        val mint = payload.optString("mint", "")
+        val symbol = payload.optString("symbol", "")
+        val asset = symbol.ifBlank { if (mint.length > 12) mint.take(6) + "…" + mint.takeLast(4) else mint.ifBlank { "—" } }
+        val side = payload.optString("side", "").uppercase()
+        val detail = when (type) {
+         "FillRecorded" -> side + " FILLED · " + asset + " · " + payload.optString("filled_fraction", "—") + " filled"
+         "OrderPlaced" -> side + " ORDER · " + asset
+         "OrderRejected" -> "ORDER REJECTED · " + asset + " · " + payload.optString("reason", "blocked")
+         "PositionOpened" -> "POSITION OPENED · " + asset
+         "PositionClosed" -> "POSITION CLOSED · " + asset + " · " + payload.optString("reason", "")
+         "JournalNote" -> "AI NOTE · " + payload.optString("note_kind", "analysis") + " · " + asset
+         "Escalation" -> "RISK ALERT · " + asset
+         else -> type + " · " + asset
+        }
+        rows.add(event.optString("ts_utc", "") + "\n" + detail + "\nSOURCE: " + event.optString("source", "paper").uppercase())
+       }
+       activity = rows
+       message = if (rows.isEmpty()) "LEDGER ONLINE · no recorded paper fills yet." else "LIVE LEDGER · " + rows.size + " recorded events"
+      }
+     } else { message = "LEDGER UNAVAILABLE · risk seat has no read permission" }
+     delay(15_000)
+    } catch (e: Exception) { message = "LEDGER SYNC ERROR · " + (e.message ?: "unavailable"); delay(12_000) }
+   }
+  }
+ }
  val tabs=listOf("Home","Agents","Activity","Tools","Rules","Market")
  Scaffold(containerColor=Bg,bottomBar={NavigationBar(containerColor=Color(0xFF101219),contentColor=Color.White){
   tabs.forEachIndexed { i,s -> NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Text(listOf("⌂","✣","⌁","▦","⚙","◎")[i],fontSize=20.sp)},label={Text(s,fontSize=10.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Red,indicatorColor=Color(0xFF35202A),selectedTextColor=Color.White,unselectedTextColor=Muted)) }
@@ -379,7 +433,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       val liq=coin.optDouble("liquidity_usd",Double.NaN)
       val price=coin.optDouble("price_usd",Double.NaN)
       CardBox { Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-       Text(coin.optString("symbol","—")+" · "+coin.optString("name","Unknown"),fontWeight=FontWeight.Bold,color=Color.White)
+       Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+  CoinPulseBadge(coin.optString("symbol", "SOL"))
+  Column(Modifier.weight(1f)) {
+   Text(coin.optString("symbol","—")+" · "+coin.optString("name","Unknown"),fontWeight=FontWeight.Bold,color=Color.White)
+   Text("LIVE MARKET CANDIDATE",fontSize=8.sp,color=Blue,letterSpacing=1.sp)
+  }
+  Text("●", color=Green, fontSize=12.sp)
+ }
        Text(mint.take(7)+"…"+mint.takeLast(5),fontSize=9.sp,color=Muted)
        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
         Metric("PRICE",if(price.isFinite()) "$"+String.format(java.util.Locale.US,"%.8f",price) else "N/A",Blue)
@@ -433,6 +494,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     Text(name,fontSize=7.sp,color=if(statuses[name.lowercase()]?.startsWith("ONLINE")==true) Green else Muted,maxLines=1)
    }
   }
+ }
+}
+@Composable private fun CoinPulseBadge(symbol: String) {
+ val pulse = rememberInfiniteTransition(label = "coin-pulse")
+ val scale by pulse.animateFloat(0.92f, 1.08f, infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "coin-scale")
+ val glow by pulse.animateFloat(0.22f, 0.72f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "coin-glow")
+ Box(Modifier.size(46.dp).background(Blue.copy(alpha = glow * 0.18f), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
+  Text(symbol.take(1).uppercase(), fontSize = (19f * scale).sp, fontWeight = FontWeight.Black, color = Blue)
  }
 }
 @Composable private fun CardBox(content:@Composable ColumnScope.()->Unit){Card(colors=CardDefaults.cardColors(containerColor=Panel),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),content=content)}}
