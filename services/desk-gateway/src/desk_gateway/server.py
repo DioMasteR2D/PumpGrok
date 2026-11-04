@@ -333,10 +333,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
             return
         if path == "/market/search":
-            expected = state["tokens"].get("scout")
             presented = _presented_token(self.headers)
-            if not expected or not presented or not hmac.compare_digest(presented.encode(), expected.encode()):
-                self._send_json(401, {"error": {"code": "unauthorized", "message": "scout token required"}})
+            allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
+            if not presented or not any(token and hmac.compare_digest(presented.encode(), token.encode()) for token in allowed):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief or scout token required"}})
                 return
             try:
                 from urllib.parse import parse_qs, urlsplit
@@ -356,12 +356,10 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/market/candidates":
-            expected = state["tokens"].get("scout")
             presented = _presented_token(self.headers)
-            if not expected or not presented or not hmac.compare_digest(
-                presented.encode(), expected.encode()
-            ):
-                self._send_json(401, {"error": {"code": "unauthorized", "message": "scout token required"}})
+            allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
+            if not presented or not any(token and hmac.compare_digest(presented.encode(), token.encode()) for token in allowed):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief or scout token required"}})
                 return
             try:
                 from urllib.parse import parse_qs, urlsplit
