@@ -235,6 +235,8 @@ def _agent_market_decisions(row: dict[str, Any]) -> list[dict[str, str]]:
         {"agent": "RISK", "decision": "BLOCK ENTRY", "reason": "Safety verification is incomplete"},
         {"agent": "SNIPER", "decision": "WAIT", "reason": "No entry while Risk gate is blocked"},
         {"agent": "EXIT", "decision": "NO POSITION CONTEXT", "reason": "No open-position signal attached to this market snapshot"},
+        {"agent": "SHILL", "decision": "SENTIMENT UNKNOWN", "reason": "Social sentiment provider is not connected"},
+        {"agent": "JOURNAL", "decision": "OBSERVATION ONLY", "reason": "No trade event exists for this token in the paper ledger"},
         {"agent": "CHIEF", "decision": "HOLD / WATCH", "reason": "Discovery is live; entry remains blocked pending safety checks"},
     ]
 
@@ -379,6 +381,8 @@ def market_home(limit: int = 20) -> dict[str, Any]:
     pump_events = pump.get("events", [])
     pump_mints = set()
     for event in pump_events:
+        if int(event.get("received_at") or 0) < int(time.time()) - 180:
+            continue
         mint = str(event.get("mint") or "")
         if not mint:
             continue
