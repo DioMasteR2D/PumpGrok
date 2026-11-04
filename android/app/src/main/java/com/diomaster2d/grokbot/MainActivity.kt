@@ -264,6 +264,53 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("AGENT NETWORK",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("${tools.size} TOOLS",fontSize=11.sp,color=Green)} }
      item { AgentOrbit(agentStatuses) }
+     item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+      Column { Text("LIVE SOLANA MARKET",fontSize=18.sp,fontWeight=FontWeight.Bold); Text("TRENDING · NEW PAIRS · BOT DECISIONS",fontSize=9.sp,color=Muted,letterSpacing=1.sp) }
+      Text("● LIVE",fontSize=10.sp,color=Green)
+     } }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
+      Text(homeMarketMessage,fontSize=10.sp,color=Muted)
+      val providers=homeMarketData?.optJSONArray("providers")
+      if(providers!=null) {
+       val providerLine=(0 until providers.length()).mapNotNull { providers.optJSONObject(it) }.joinToString("  ·  ") { it.optString("name")+" "+it.optString("status") }
+       Text(providerLine,fontSize=9.sp,color=Blue)
+      }
+      val stream=homeMarketData?.optJSONObject("pumpportal_stream")
+      Text("PUMPPORTAL STREAM · "+(if(stream?.optBoolean("connected")==true) "CONNECTED" else "RECONNECTING / NOT CONNECTED"),fontSize=10.sp,color=if(stream?.optBoolean("connected")==true) Green else Muted)
+      Text("Rule-based agent assessments · unverified tokens remain blocked · no live orders.",fontSize=10.sp,color=Red)
+      OutlinedButton(onClick={tab=5},modifier=Modifier.fillMaxWidth()) { Text("OPEN FULL MARKET & SEARCH COINS") }
+     } } }
+     val homeCandidates=homeMarketData?.optJSONArray("candidates")
+     val homeRows=if(homeCandidates==null) emptyList() else (0 until homeCandidates.length()).mapNotNull { homeCandidates.optJSONObject(it) }
+     if(homeRows.isEmpty()) item { CardBox { Text("Waiting for market providers. Connect the gateway to load trending coins.",fontSize=11.sp,color=Muted) } }
+     else items(homeRows.size) { idx ->
+      val coin=homeRows[idx]
+      val price=coin.optDouble("price_usd",Double.NaN)
+      val liquidity=coin.optDouble("liquidity_usd",Double.NaN)
+      val volume=coin.optDouble("volume_24h_usd",Double.NaN)
+      val change=coin.optDouble("price_change_1h_pct",Double.NaN)
+      val agents=coin.optJSONArray("agents")
+      val decisionLine=if(agents==null) "Agent assessment unavailable" else (0 until agents.length()).mapNotNull { agents.optJSONObject(it) }.joinToString("  ·  ") { it.optString("agent")+": "+it.optString("decision") }
+      CardBox { Column(Modifier.fillMaxWidth().clickable { marketQuery=coin.optString("mint",""); tab=5 },verticalArrangement=Arrangement.spacedBy(6.dp)) {
+       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+         Text(coin.optString("symbol","—")+" · "+coin.optString("name","Unknown"),fontWeight=FontWeight.Bold,color=Color.White)
+         Text(coin.optString("trend","MARKET")+" · "+coin.optJSONArray("source")?.let { a -> (0 until a.length()).joinToString(" + ") { a.optString(it) } }.orEmpty(),fontSize=9.sp,color=Blue)
+        }
+        Text(if(change.isFinite()) String.format(java.util.Locale.US,"%+.1f%%",change) else "—",fontSize=13.sp,color=if(change.isFinite()&&change>=0)Green else Red,fontWeight=FontWeight.Bold)
+       }
+       Text(coin.optString("mint","").let { if(it.length>16) it.take(7)+"…"+it.takeLast(5) else it },fontSize=9.sp,color=Muted)
+       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+        Metric("PRICE",if(price.isFinite()) "$"+String.format(java.util.Locale.US,"%.8f",price) else "N/A",Blue)
+        Metric("LIQ",if(liquidity.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",liquidity) else "N/A",Color.White)
+        Metric("VOL 24H",if(volume.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",volume) else "N/A",Green)
+       }
+       Text(decisionLine,fontSize=9.sp,color=Color.White)
+       Text("TAP COIN FOR FULL MARKET SEARCH",fontSize=8.sp,color=Blue)
+       Text(coin.optString("risk_gate","BLOCKED · SAFETY NOT VERIFIED"),fontSize=9.sp,color=Red,fontWeight=FontWeight.Bold)
+      } }
+     }
+
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
       Text("BLOOM WALLET · VERIFIED BALANCES",fontSize=13.sp,fontWeight=FontWeight.Bold,color=Blue)
       Text(walletBalanceMessage,fontSize=10.sp,color=Muted)
