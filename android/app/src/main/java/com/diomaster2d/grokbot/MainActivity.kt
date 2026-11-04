@@ -83,10 +83,19 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  }
  suspend fun call(name:String,args:JSONObject=JSONObject()):JSONObject=rpc("tools/call",JSONObject().put("name",name).put("arguments",args)).optJSONObject("result")?:JSONObject()
  suspend fun marketCandidates():JSONObject=withContext(Dispatchers.IO) {
-  val req=Request.Builder().url("${base.trimEnd('/')}/market/candidates?limit=12").header("Authorization","Bearer $token").get().build()
+  val req=Request.Builder().url("${base.trimEnd('/')}/market/candidates?limit=20").header("Authorization","Bearer $token").get().build()
   http.newCall(req).execute().use { res ->
    val txt=res.body?.string().orEmpty()
    check(res.isSuccessful) { "Market scanner HTTP ${res.code}: ${txt.take(250)}" }
+   JSONObject(txt)
+  }
+ }
+ suspend fun marketSearch(query:String):JSONObject=withContext(Dispatchers.IO) {
+  val encoded=java.net.URLEncoder.encode(query.trim(),"UTF-8")
+  val req=Request.Builder().url("${base.trimEnd('/')}/market/search?q=$encoded&limit=20").header("Authorization","Bearer $token").get().build()
+  http.newCall(req).execute().use { res ->
+   val txt=res.body?.string().orEmpty()
+   check(res.isSuccessful) { "Market search HTTP ${res.code}: ${txt.take(250)}" }
    JSONObject(txt)
   }
  }
@@ -127,7 +136,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
  var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
  var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
- var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var marketMessage by remember { mutableStateOf("Market scanner not started") }
+ var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
  var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
@@ -171,12 +180,12 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    message="Auto diagnostics complete · ${health.count{it.value.startsWith("ONLINE")}}/10 seats online · ${reports.size} checks"
   }
  }
- LaunchedEffect(client, tab) {
+ LaunchedEffect(client, tab, marketQuery) {
   val activeClient = client ?: return@LaunchedEffect
   if (tab == 5) {
    while (true) {
     try {
-     val snapshot = activeClient.marketCandidates()
+     val snapshot = if (marketQuery.isNotBlank()) activeClient.marketSearch(marketQuery) else activeClient.marketCandidates()
      marketData = snapshot
      val count = snapshot.optInt("candidate_count", snapshot.optJSONArray("candidates")?.length() ?: 0)
      val stamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
@@ -411,6 +420,22 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Text("SCANNER",fontSize=10.sp,color=Green)
      } }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text("ΑΝΑΖΗΤΗΣΗ SOLANA COINS · SYMBOL / NAME / MINT",fontSize=10.sp,color=Blue,fontWeight=FontWeight.Bold)
+      OutlinedTextField(value=marketQuery,onValueChange={marketQuery=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("π.χ. BONK, WIF ή mint address")},placeholder={Text("Search coins across Solana DEX pairs")})
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+       Button(onClick={run {
+        require(marketQuery.isNotBlank()) { "Γράψε όνομα, σύμβολο ή mint coin." }
+        val c=DeskClient(gateway.trim().removeSuffix("/"),"scout",token.trim())
+        c.connect(); marketData=c.marketSearch(marketQuery)
+        val count=marketData?.optInt("candidate_count",0) ?: 0
+        marketMessage="SEARCH RESULTS · $count Solana pairs · read-only"
+        activity=(listOf("MARKET SEARCH · "+marketQuery+" · "+count+" results") + activity).take(30)
+       }},enabled=!busy&&token.isNotBlank()&&marketQuery.isNotBlank(),modifier=Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"SEARCHING..." else "SEARCH COINS")}
+       OutlinedButton(onClick={marketQuery="";run {
+        val c=DeskClient(gateway.trim().removeSuffix("/"),"scout",token.trim());c.connect();marketData=c.marketCandidates()
+        marketMessage="LIVE DISCOVERY · latest Solana pools"
+       }},enabled=!busy&&token.isNotBlank(),modifier=Modifier.weight(1f)){Text("LATEST COINS")}
+      }
       Text(marketMessage,fontSize=11.sp,color=Muted)
       Text("LIQUIDITY >= USD 40K · MINT/FREEZE REVOKED · TOP10 <=25% · SCORE >=70",fontSize=10.sp,color=Blue)
       Text("TP +70%…+130% · SL -6% · TRAIL -12% · SIZE 8% EQUITY",fontSize=10.sp,color=Green)
@@ -424,9 +449,10 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       }},enabled=!busy&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"SCANNING..." else "SCAN MARKET NOW")}
      } } }
      val candidates=marketData?.optJSONArray("candidates")
-     if(candidates==null || candidates.length()==0) item { CardBox { Text("No market data loaded. Tap SCAN MARKET NOW.",fontSize=12.sp,color=Muted) } }
-     else items(candidates.length()) { idx ->
-      val coin=candidates.optJSONObject(idx) ?: JSONObject()
+     val candidateRows=if(candidates==null) emptyList() else (0 until candidates.length()).mapNotNull { candidates.optJSONObject(it) }
+     if(candidateRows.isEmpty()) item { CardBox { Text("Δεν βρέθηκαν coins. Κάνε αναζήτηση ή πάτησε LATEST COINS.",fontSize=12.sp,color=Muted) } }
+     else items(candidateRows.size) { idx ->
+      val coin=candidateRows[idx]
       val checks=coin.optJSONObject("checks") ?: JSONObject()
       val onchain=coin.optJSONObject("onchain") ?: JSONObject()
       val mint=coin.optString("mint")
@@ -446,6 +472,13 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         Metric("PRICE",if(price.isFinite()) "$"+String.format(java.util.Locale.US,"%.8f",price) else "N/A",Blue)
         Metric("LIQUIDITY",if(liq.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",liq) else "N/A",Color.White)
         Metric("AI SCORE",if(coin.isNull("ai_score")) "N/A" else coin.optString("ai_score"),Red)
+       }
+       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+        val vol=coin.optDouble("volume_24h_usd",Double.NaN)
+        val cap=coin.optDouble("market_cap_usd",Double.NaN)
+        Metric("VOL 24H",if(vol.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",vol) else "N/A",Green)
+        Metric("MKT CAP",if(cap.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",cap) else "N/A",Color.White)
+        Metric("SOURCE",coin.optJSONArray("source")?.optString(0) ?: "DEX",Blue)
        }
        Text("Mint revoked: "+checks.optBoolean("mint_authority",false)+" · Freeze revoked: "+checks.optBoolean("freeze_authority",false)+" · Top10: "+(if(onchain.isNull("top10_share"))"N/A" else String.format(java.util.Locale.US,"%.1f%%",onchain.optDouble("top10_share")*100)),fontSize=10.sp,color=Muted)
        Text("BUY DISABLED · "+(coin.optJSONArray("blockers")?.let { a -> (0 until a.length()).joinToString { a.optString(it) } } ?: "Awaiting checks"),fontSize=10.sp,color=Red)
