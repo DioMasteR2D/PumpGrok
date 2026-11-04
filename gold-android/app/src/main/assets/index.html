@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DioMasteR GOLD AI</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090909;color:#f5f0df;font:15px Arial,sans-serif;padding:18px}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #5d491d;padding-bottom:14px}
+h1{font-size:22px;color:#e2bd55;margin:0}.tag{color:#101010;background:#e2bd55;border-radius:20px;padding:7px 11px;font-size:11px;font-weight:bold}
+small,.muted{color:#a99e83}.price{font-size:34px;color:#f0d27b;margin:18px 0 4px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+.card{background:#171613;border:1px solid #40351d;border-radius:13px;padding:14px}.label{font-size:12px;color:#a99e83}.value{font-size:21px;margin-top:8px;color:#f1d27b}
+button{border:0;border-radius:10px;padding:14px;font-weight:bold;font-size:15px;width:100%;margin:5px 0}
+.buy{background:#d6b24e;color:#14110a}.sell{background:#38342a;color:#fff}.reset{background:#211e18;color:#d8cba8}
+.note{font-size:12px;line-height:1.5;color:#aaa18e;background:#171613;padding:13px;border-radius:10px;margin-top:18px}
+#positions{font-size:13px;color:#d9cfb5;line-height:1.7}
+</style></head><body>
+<header><div><h1>DioMasteR GOLD AI</h1><small>XAUUSD • Paper Trading</small></div><span class="tag">DEMO ONLY</span></header>
+<div class="price" id="gold">$2,750.00</div><div class="muted">Ενδεικτική τιμή χρυσού — προσομοίωση, όχι live feed</div>
+<div class="grid">
+<div class="card"><div class="label">Εικονικό κεφάλαιο</div><div class="value" id="balance">$10,000.00</div></div>
+<div class="card"><div class="label">Ημερήσιο P/L</div><div class="value" id="pnl">$0.00</div></div>
+<div class="card"><div class="label">RSI (ενδεικτικό)</div><div class="value">52.4</div></div>
+<div class="card"><div class="label">Τάση EMA</div><div class="value">NEUTRAL</div></div>
+</div>
+<div class="card"><b>Εικονικές συναλλαγές</b><p class="muted">Δοκιμή στρατηγικής χωρίς σύνδεση broker ή πραγματικές εντολές.</p>
+<button class="buy" onclick="trade('BUY')">ΕΙΚΟΝΙΚΟ BUY</button><button class="sell" onclick="trade('SELL')">ΕΙΚΟΝΙΚΟ SELL</button>
+<button class="reset" onclick="resetPaper()">ΕΠΑΝΑΦΟΡΑ DEMO</button></div>
+<div class="card" style="margin-top:12px"><b>Ανοιχτές θέσεις</b><div id="positions">Καμία θέση ακόμη.</div></div>
+<div class="note">ΠΡΟΣΟΧΗ: Αυτή η έκδοση είναι offline demo με ενδεικτική τιμή και απλές εικονικές εγγραφές. Δεν έχει live δεδομένα, πραγματικό AI, MT5 ή σύνδεση broker. Δεν πραγματοποιεί πραγματικές συναλλαγές. Η σύνδεση MT5 θα προστεθεί μόνο σε ξεχωριστή, ελεγχόμενη demo έκδοση.</div>
+<script>
+let balance=10000, pnl=0, positions=[], price=2750;
+function render(){document.getElementById('balance').textContent='$'+balance.toFixed(2);document.getElementById('pnl').textContent='$'+pnl.toFixed(2);document.getElementById('positions').innerHTML=positions.length?positions.map((p,i)=>'#'+(i+1)+' '+p.side+' @ $'+p.entry.toFixed(2)).join('<br>'):'Καμία θέση ακόμη.'}
+function trade(side){let amount=100, units=amount/price;positions.push({side,entry:price,units});balance-=amount;render()}
+function resetPaper(){balance=10000;pnl=0;positions=[];render()}
+render();
+</script></body></html>
