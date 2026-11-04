@@ -53,6 +53,7 @@ from pumpgrok.core.errors import NotYetImplemented, OrderRejectedError, Pumpgrok
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import ToolRegistry
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution import build_adapter
 from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
@@ -107,7 +108,7 @@ class _ClosedNotifier(Notifier):
         raise NotYetImplemented("notify.send needs Phase 4 sinks", tool="notify.alert")
 
 
-def _enable_autonomous_paper(store: LedgerStore, budget: Any, clock: Clock) -> str:
+def _enable_autonomous_paper(store: LedgerStore, budget: RiskBudget, clock: Clock) -> str:
     """Record the operator-approved autonomous-paper policy once, without weakening RISK gates."""
     ensure_paper_genesis(store, budget)
     previous = read_autonomy(store)
