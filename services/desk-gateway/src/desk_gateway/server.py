@@ -55,12 +55,13 @@ from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import ToolRegistry
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution import build_adapter
+from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import Clock, WallClock
+from pumpgrok.replay.clock import Clock, WallClock, format_ts_utc
 from pumpgrok.risk.alert_channel import AlertChannel, build_alert_channel
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import killswitch_file
-from pumpgrok.tools import build_registry, register_read_tools
+from pumpgrok.tools import build_registry, ensure_paper_genesis, register_read_tools
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
 from pumpgrok.tools.desk.docs_search import build_docs_search_tool
@@ -104,6 +105,25 @@ class _ClosedNotifier(Notifier):
 
     async def send_webhook(self, url: str, payload: dict[str, Any]) -> None:
         raise NotYetImplemented("notify.send needs Phase 4 sinks", tool="notify.alert")
+
+
+def _enable_autonomous_paper(store: LedgerStore, budget: Any, clock: Clock) -> str:
+    """Record the operator-approved autonomous-paper policy once, without weakening RISK gates."""
+    ensure_paper_genesis(store, budget)
+    previous = read_autonomy(store)
+    if previous != "autonomous-paper":
+        ts_utc = format_ts_utc(clock.now())
+        store.append_batch(
+            autonomy_rows(
+                "autonomous-paper",
+                "human:DioMasteR2D",
+                previous=previous,
+                ts_utc=ts_utc,
+                source="paper",
+                correlation_id="desk-gateway",
+            )
+        )
+    return read_autonomy(store)
 
 
 class GatewayRefusedError(RuntimeError):
@@ -151,6 +171,7 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
     )
     store = LedgerStore(ledger_path)
     budget = settings.risk
+    autonomy = _enable_autonomous_paper(store, budget, active_clock)
     latch = killswitch_file(data_dir)
     engine = RiskEngine(
         store=store,
@@ -159,6 +180,7 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
         clock=active_clock,
         limits=settings.limits,
         mode="paper",
+        autonomy=autonomy,  # type: ignore[arg-type]  # ledger-validated policy; live is refused above
         killswitch_path=latch,
         alert_channel=(
             alert_channel
