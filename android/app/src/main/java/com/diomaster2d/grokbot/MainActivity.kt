@@ -83,7 +83,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  }
  suspend fun call(name:String,args:JSONObject=JSONObject()):JSONObject=rpc("tools/call",JSONObject().put("name",name).put("arguments",args)).optJSONObject("result")?:JSONObject()
  suspend fun marketCandidates():JSONObject=withContext(Dispatchers.IO) {
-  val req=Request.Builder().url("${base.trimEnd("/")}/market/candidates?limit=12").header("Authorization","Bearer $token").get().build()
+  val req=Request.Builder().url("${base.trimEnd('/')}/market/candidates?limit=12").header("Authorization","Bearer $token").get().build()
   http.newCall(req).execute().use { res ->
    val txt=res.body?.string().orEmpty()
    check(res.isSuccessful) { "Market scanner HTTP ${res.code}: ${txt.take(250)}" }
@@ -354,7 +354,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      } }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
       Text(marketMessage,fontSize=11.sp,color=Muted)
-      Text("LIQUIDITY >= $40K · MINT/FREEZE REVOKED · TOP10 <=25% · SCORE >=70",fontSize=10.sp,color=Blue)
+      Text("LIQUIDITY >= USD 40K · MINT/FREEZE REVOKED · TOP10 <=25% · SCORE >=70",fontSize=10.sp,color=Blue)
       Text("TP +70%…+130% · SL -6% · TRAIL -12% · SIZE 8% EQUITY",fontSize=10.sp,color=Green)
       Button(onClick={run {
        val c=DeskClient(gateway.trim().removeSuffix("/"),"scout",token.trim())
