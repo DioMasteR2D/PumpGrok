@@ -253,7 +253,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim().lowercase(),token.trim())
        val found=c.connect()
        securePrefs?.edit()?.putString("gateway_token", token.trim())?.apply()
-       client=c;tools=found;status="CONNECTED · PAPER"
+       client=c;tools=found;status="CONNECTED · BLOOM ONLY · EXECUTION LOCKED"
        message="Connected to ${seat.uppercase()} · ${found.size} permitted tools"
        activity=listOf("Seat switched to ${seat.uppercase()} · ${found.size} tools loaded")
       }},enabled=!busy&&seat.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT SELECTED AGENT")}
@@ -268,9 +268,9 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      } }
     }
     2 -> {
-     item { Text("ACTIVITY & EXECUTION LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
+     item { Text("ACTIVITY & PAPER LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-      Text("VERIFIED EXECUTION HISTORY",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text("PAPER EXECUTION HISTORY",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
       Text("Οι εγγραφές προέρχονται από το append-only ledger του server. Δεν εμφανίζονται εικονικές κινήσεις όταν δεν υπάρχουν fills.",fontSize=10.sp,color=Muted)
       Button(onClick={run {
        val base=gateway.trim().removeSuffix("/")
@@ -340,7 +340,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
        require(gateway.startsWith("https://")){"Χρειάζεται ασφαλής HTTPS διεύθυνση gateway."}
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim());val found=c.connect()
        securePrefs?.edit()?.putString("gateway_token", token.trim())?.apply()
-       client=c;tools=found;status="CONNECTED · PAPER";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία για το seat ${seat.uppercase()}."
+       client=c;tools=found;status="CONNECTED · BLOOM ONLY · EXECUTION LOCKED";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία για το seat ${seat.uppercase()}."
         bloomReport=c.bloomStatus().toString(2)
         equity="--";cash="--";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
       }},enabled=!busy&&gateway.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT DESK")}
