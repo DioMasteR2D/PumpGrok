@@ -5,6 +5,7 @@ Only discovery events are subscribed to. This module never signs or submits trad
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections import deque
@@ -38,7 +39,6 @@ async def run_pumpportal_stream() -> None:
                 await ws.send('{"method":"subscribeMigration"}')
                 async for raw in ws:
                     try:
-                        import json
                         payload = json.loads(raw)
                     except (TypeError, ValueError):
                         continue
