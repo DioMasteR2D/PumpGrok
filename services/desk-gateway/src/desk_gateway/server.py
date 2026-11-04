@@ -26,6 +26,7 @@ import contextlib
 import hmac
 import json
 import logging
+import os
 import re
 import secrets
 import threading
@@ -37,6 +38,8 @@ import httpx
 from pydantic import ValidationError
 
 from desk_gateway.config import GatewayConfig
+from desk_gateway.market_scanner import market_home, scan_market, search_market
+from desk_gateway.market_stream import run_pumpportal_stream
 from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import (
     default_contracts_dir,
@@ -51,14 +54,16 @@ from pumpgrok.core.errors import NotYetImplemented, OrderRejectedError, Pumpgrok
 from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
 from pumpgrok.core.manifests import load_bot_manifests
 from pumpgrok.core.registry import ToolRegistry
+from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.core.side_effect import SideEffect
 from pumpgrok.execution import build_adapter
+from pumpgrok.ledger.autonomy import autonomy_rows, read_autonomy
 from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import Clock, WallClock
+from pumpgrok.replay.clock import Clock, WallClock, format_ts_utc
 from pumpgrok.risk.alert_channel import AlertChannel, build_alert_channel
 from pumpgrok.risk.engine import RiskEngine
 from pumpgrok.risk.killswitch import killswitch_file
-from pumpgrok.tools import build_registry, register_read_tools
+from pumpgrok.tools import build_registry, ensure_paper_genesis, register_read_tools
 from pumpgrok.tools.desk._memory import MemoryBank
 from pumpgrok.tools.desk.brief import build_brief_tool
 from pumpgrok.tools.desk.docs_search import build_docs_search_tool
@@ -102,6 +107,25 @@ class _ClosedNotifier(Notifier):
 
     async def send_webhook(self, url: str, payload: dict[str, Any]) -> None:
         raise NotYetImplemented("notify.send needs Phase 4 sinks", tool="notify.alert")
+
+
+def _enable_autonomous_paper(store: LedgerStore, budget: RiskBudget, clock: Clock) -> str:
+    """Record the operator-approved autonomous-paper policy once, without weakening RISK gates."""
+    ensure_paper_genesis(store, budget)
+    previous = read_autonomy(store)
+    if previous != "autonomous-paper":
+        ts_utc = format_ts_utc(clock.now())
+        store.append_batch(
+            autonomy_rows(
+                "autonomous-paper",
+                "human:DioMasteR2D",
+                previous=previous,
+                ts_utc=ts_utc,
+                source="paper",
+                correlation_id="desk-gateway",
+            )
+        )
+    return read_autonomy(store)
 
 
 class GatewayRefusedError(RuntimeError):
@@ -149,6 +173,7 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
     )
     store = LedgerStore(ledger_path)
     budget = settings.risk
+    autonomy = _enable_autonomous_paper(store, budget, active_clock)
     latch = killswitch_file(data_dir)
     engine = RiskEngine(
         store=store,
@@ -157,6 +182,7 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
         clock=active_clock,
         limits=settings.limits,
         mode="paper",
+        autonomy=autonomy,  # type: ignore[arg-type]  # ledger-validated policy; live is refused above
         killswitch_path=latch,
         alert_channel=(
             alert_channel
@@ -301,9 +327,235 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(405, {"error": {"code": "method_not_allowed", "message": "use POST"}})
 
     def do_GET(self) -> None:
-        # Liveness only: no tool, seat or ledger detail, and no token required.
-        if self.path.split("?", 1)[0] == "/healthz":
+        # Public liveness only; Bloom account data requires the chief seat token.
+        path = self.path.split("?", 1)[0]
+        state = self.server.gateway_state  # type: ignore[attr-defined]
+        if path == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
+            return
+        if path == "/market/home":
+            presented = _presented_token(self.headers)
+            allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
+            if not presented or not any(token and hmac.compare_digest(presented.encode(), token.encode()) for token in allowed):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief or scout token required"}})
+                return
+            try:
+                from urllib.parse import parse_qs, urlsplit
+                query = parse_qs(urlsplit(self.path).query)
+                limit = int(query.get("limit", ["20"])[0])
+                result = market_home(limit=limit)
+                self._send_json(200, result)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+            except Exception:
+                log.exception("market home aggregation failed")
+                self._send_json(502, {"error": "Market home unavailable"})
+            return
+        if path == "/market/search":
+            presented = _presented_token(self.headers)
+            allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
+            if not presented or not any(token and hmac.compare_digest(presented.encode(), token.encode()) for token in allowed):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief or scout token required"}})
+                return
+            try:
+                from urllib.parse import parse_qs, urlsplit
+                query = parse_qs(urlsplit(self.path).query)
+                term = query.get("q", [""])[0]
+                limit = int(query.get("limit", ["20"])[0])
+                result = search_market(term, limit=limit)
+                self._send_json(200, result)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+            except httpx.HTTPError:
+                log.exception("market token search provider failed")
+                self._send_json(502, {"error": "Token search provider unavailable"})
+            except Exception:
+                log.exception("market token search failed")
+                self._send_json(502, {"error": "Market search unavailable"})
+            return
+
+        if path == "/market/candidates":
+            presented = _presented_token(self.headers)
+            allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
+            if not presented or not any(token and hmac.compare_digest(presented.encode(), token.encode()) for token in allowed):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief or scout token required"}})
+                return
+            try:
+                from urllib.parse import parse_qs, urlsplit
+                query = parse_qs(urlsplit(self.path).query)
+                limit = int(query.get("limit", ["12"])[0])
+                if not 1 <= limit <= 20:
+                    raise ValueError("limit must be between 1 and 20")
+                result = scan_market(limit=limit)
+                self._send_json(200, result)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+            except Exception:
+                log.exception("market discovery request failed")
+                self._send_json(502, {"error": "Market discovery unavailable"})
+            return
+        if path == "/bloom/balances":
+            expected = state["tokens"].get("chief")
+            presented = _presented_token(self.headers)
+            if not expected or not presented or not hmac.compare_digest(
+                presented.encode(), expected.encode()
+            ):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief token required"}})
+                return
+            api_key = os.environ.get("BLOOM_API_KEY", "").strip()
+            if not api_key:
+                self._send_json(503, {"error": "BLOOM_API_KEY is not configured"})
+                return
+            rpc_url = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip()
+            try:
+                wallets_response = httpx.get(
+                    "https://eu.solana.bloombot.app/api/v1/wallets",
+                    headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+                    timeout=12.0,
+                )
+                if wallets_response.status_code == 405:
+                    wallets_response = httpx.post(
+                        "https://eu.solana.bloombot.app/api/v1/wallets",
+                        headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json", "Content-Type": "application/json"},
+                        json={}, timeout=12.0,
+                    )
+                wallets_response.raise_for_status()
+                payload = wallets_response.json()
+                wallet_rows = payload.get("data", {}).get("wallets", [])
+                if not isinstance(wallet_rows, list):
+                    raise ValueError("Bloom wallets response has no wallet list")
+                results = []
+                all_mints = {"So11111111111111111111111111111111111111112"}
+                for wallet in wallet_rows:
+                    address = str(wallet.get("address", "")).strip()
+                    if not address:
+                        continue
+                    def rpc_call(method: str, params: list[Any]) -> dict[str, Any]:
+                        response = httpx.post(
+                            rpc_url,
+                            json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                            headers={"Content-Type": "application/json"},
+                            timeout=15.0,
+                        )
+                        response.raise_for_status()
+                        body = response.json()
+                        if body.get("error"):
+                            raise ValueError(f"Solana RPC {method} failed")
+                        return body.get("result", {})
+                    sol_result = rpc_call("getBalance", [address, {"commitment": "confirmed"}])
+                    sol_amount = int(sol_result.get("value", 0)) / 1_000_000_000
+                    tokens = []
+                    for program in (
+                        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+                    ):
+                        token_result = rpc_call("getTokenAccountsByOwner", [
+                            address, {"programId": program},
+                            {"encoding": "jsonParsed", "commitment": "confirmed"},
+                        ])
+                        for entry in token_result.get("value", []):
+                            info = entry.get("account", {}).get("data", {}).get("parsed", {}).get("info", {})
+                            amount = info.get("tokenAmount", {})
+                            mint = str(info.get("mint", ""))
+                            ui_amount = float(amount.get("uiAmountString") or 0)
+                            if mint and ui_amount > 0:
+                                tokens.append({"mint": mint, "amount": ui_amount, "decimals": int(amount.get("decimals", 0))})
+                                all_mints.add(mint)
+                    results.append({
+                        "address": address,
+                        "label": wallet.get("label", ""),
+                        "spot_active": bool(wallet.get("spot_active", False)),
+                        "sol": sol_amount,
+                        "tokens": tokens,
+                    })
+                prices: dict[str, Any] = {}
+                mint_list = list(all_mints)
+                for offset in range(0, len(mint_list), 50):
+                    batch = mint_list[offset:offset + 50]
+                    price_headers = {"Accept": "application/json"}
+                    jupiter_key = os.environ.get("JUPITER_API_KEY", "").strip()
+                    if jupiter_key:
+                        price_headers["x-api-key"] = jupiter_key
+                    price_response = httpx.get(
+                        "https://api.jup.ag/price/v3",
+                        params={"ids": ",".join(batch)},
+                        headers=price_headers,
+                        timeout=12.0,
+                    )
+                    if price_response.is_success:
+                        prices.update(price_response.json())
+                total_usd = 0.0
+                sol_mint = "So11111111111111111111111111111111111111112"
+                for wallet in results:
+                    sol_price = prices.get(sol_mint, {}).get("usdPrice")
+                    wallet["sol_usd"] = float(sol_price) * wallet["sol"] if sol_price is not None else None
+                    wallet["token_values"] = []
+                    for token in wallet["tokens"]:
+                        price = prices.get(token["mint"], {}).get("usdPrice")
+                        value = float(price) * token["amount"] if price is not None else None
+                        token["usd_price"] = price
+                        token["usd_value"] = value
+                        wallet["token_values"].append(token)
+                        if value is not None:
+                            total_usd += value
+                    if wallet["sol_usd"] is not None:
+                        total_usd += wallet["sol_usd"]
+                self._send_json(200, {
+                    "connected": True,
+                    "source": "Bloom wallet discovery + Solana confirmed RPC + Jupiter Price V3",
+                    "commitment": "confirmed",
+                    "wallets": results,
+                    "total_usd": total_usd,
+                    "sol_usd_price": prices.get(sol_mint, {}).get("usdPrice"),
+                    "pricing_note": "Missing token prices are unknown, not zero.",
+                })
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                log.warning("Bloom wallet balance read failed: %s", type(exc).__name__)
+                self._send_json(502, {"connected": False, "error": "Wallet balance read failed", "detail": str(exc)[:180]})
+            return
+        if path == "/bloom/status":
+            expected = state["tokens"].get("chief")
+            presented = _presented_token(self.headers)
+            if not expected or not presented or not hmac.compare_digest(
+                presented.encode(), expected.encode()
+            ):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief token required"}})
+                return
+            api_key = os.environ.get("BLOOM_API_KEY", "").strip()
+            if not api_key:
+                self._send_json(503, {"connected": False, "error": "BLOOM_API_KEY is not configured"})
+                return
+            headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+            result: dict[str, Any] = {"connected": False, "region": "eu", "ping": None, "wallets": None}
+            try:
+                # Bloom documents these read endpoints as GET. Some API gateway
+                # deployments have returned 405/use POST; retry that response once
+                # with an empty JSON body, without ever invoking a trading endpoint.
+                ping = httpx.get("https://eu.solana.bloombot.app/api/v1/ping", headers=headers, timeout=8.0)
+                if ping.status_code == 405:
+                    ping = httpx.post(
+                        "https://eu.solana.bloombot.app/api/v1/ping",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={},
+                        timeout=8.0,
+                    )
+                result["ping"] = ping.json() if ping.content else {"http_status": ping.status_code}
+                result["ping_http_status"] = ping.status_code
+                wallets = httpx.get("https://eu.solana.bloombot.app/api/v1/wallets", headers=headers, timeout=8.0)
+                if wallets.status_code == 405:
+                    wallets = httpx.post(
+                        "https://eu.solana.bloombot.app/api/v1/wallets",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={},
+                        timeout=8.0,
+                    )
+                result["wallets"] = wallets.json() if wallets.content else {"http_status": wallets.status_code}
+                result["wallets_http_status"] = wallets.status_code
+                result["connected"] = ping.is_success and wallets.is_success
+                self._send_json(200 if result["connected"] else 502, result)
+            except (httpx.HTTPError, ValueError):
+                log.warning("Bloom read-only status request failed")
+                self._send_json(502, {"connected": False, "error": "Bloom API request failed"})
             return
         self._method_not_allowed()
 
@@ -325,17 +577,23 @@ class _Handler(BaseHTTPRequestHandler):
         presented = _presented_token(self.headers)
         # Compare as bytes: hmac.compare_digest raises TypeError on non-ASCII str.
         presented_bytes = presented.encode() if presented is not None else None
-        matched: str | None = None
+        matched_any = False
+        matched_path = False
         for seat_short, expected in tokens.items():
-            if presented_bytes is not None and hmac.compare_digest(
+            equal = presented_bytes is not None and hmac.compare_digest(
                 presented_bytes, expected.encode()
-            ):
-                matched = seat_short
-        if matched is None:
+            )
+            matched_any = matched_any or equal
+            # A deployment may intentionally use one shared bearer token for
+            # every seat. In that case, authorize the requested seat rather
+            # than letting dict iteration order select an arbitrary last seat.
+            if seat_short == short:
+                matched_path = equal
+        if matched_path:
+            return None
+        if not matched_any:
             return HTTP_UNAUTHORIZED
-        if matched != short:
-            return HTTP_FORBIDDEN
-        return None
+        return HTTP_FORBIDDEN
 
     def _auth_error_body(self, status: int) -> dict[str, Any]:
         if status == HTTP_UNAUTHORIZED:
@@ -603,6 +861,8 @@ def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call s
             cell["kill_poll_task"] = loop.create_task(
                 _poll_kill_sources(cell["engine"], kill_poll_interval_s)
             )
+            # One persistent PumpPortal discovery stream feeds every authenticated client.
+            cell["pumpportal_task"] = loop.create_task(run_pumpportal_stream())
         except Exception as exc:  # fail fast: never leave ready unset
             cell["error"] = exc
         finally:
@@ -651,6 +911,7 @@ def create_server(  # noqa: PLR0913 - keyword-only wiring inputs, one call site
         "global_map": cell["global_map"],
         "owner_loop": owner_loop,
         "kill_poll_task": cell["kill_poll_task"],
+        "pumpportal_task": cell.get("pumpportal_task"),
         "clock": active_clock,
         "shorts": short_to_seat(config.contracts_dir),
     }
@@ -663,9 +924,12 @@ def close_server(server: ThreadingHTTPServer) -> None:
     state = server.gateway_state  # type: ignore[attr-defined]
     loop = state.get("owner_loop")
     poll_task = state.get("kill_poll_task")
-    if loop is not None and poll_task is not None:
-        future = asyncio.run_coroutine_threadsafe(_cancel_and_wait(poll_task), loop)
-        future.result(timeout=_CLOSE_TIMEOUT_S)
+    pump_task = state.get("pumpportal_task")
+    if loop is not None:
+        for task in (poll_task, pump_task):
+            if task is not None:
+                future = asyncio.run_coroutine_threadsafe(_cancel_and_wait(task), loop)
+                future.result(timeout=_CLOSE_TIMEOUT_S)
     server.shutdown()
     server.server_close()
     if loop is not None:

@@ -44,7 +44,8 @@ class OrderRequest(BaseModel):
     size_lamports: int | None = Field(default=None, gt=0)
     token_units: int | None = Field(default=None, gt=0)
     max_slippage_bps: int = Field(ge=1, le=10_000)
-    approval_id: str = Field(pattern=r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
+    # None is valid only for autonomous-paper; RiskEngine refuses it in manual-ticket mode.
+    approval_id: str | None = Field(default=None, pattern=r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
     quote_id: str | None = None
     exit_reason: ExitRuleReason | None = None
     correlation_id: str
