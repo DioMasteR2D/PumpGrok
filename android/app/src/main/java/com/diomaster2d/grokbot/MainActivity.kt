@@ -252,7 +252,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Button(onClick={run {
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim().lowercase(),token.trim())
        val found=c.connect()
-       securePrefs?.edit().putString("gateway_token", token.trim()).apply()
+       securePrefs?.edit()?.putString("gateway_token", token.trim())?.apply()
        client=c;tools=found;status="CONNECTED · PAPER"
        message="Connected to ${seat.uppercase()} · ${found.size} permitted tools"
        activity=listOf("Seat switched to ${seat.uppercase()} · ${found.size} tools loaded")
@@ -339,7 +339,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Button(onClick={run{
        require(gateway.startsWith("https://")){"Χρειάζεται ασφαλής HTTPS διεύθυνση gateway."}
        val c=DeskClient(gateway.trim().removeSuffix("/"),seat.trim(),token.trim());val found=c.connect()
-       securePrefs?.edit().putString("gateway_token", token.trim()).apply()
+       securePrefs?.edit()?.putString("gateway_token", token.trim())?.apply()
        client=c;tools=found;status="CONNECTED · PAPER";message="Συνδέθηκε. Φορτώθηκαν ${found.size} εργαλεία για το seat ${seat.uppercase()}."
         bloomReport=c.bloomStatus().toString(2)
         equity="--";cash="--";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
