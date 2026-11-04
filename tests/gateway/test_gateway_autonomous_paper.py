@@ -61,7 +61,7 @@ def test_gateway_records_autonomous_paper_policy_once(tmp_path) -> None:
         store.close()
 
 
-def test_exec_place_accepts_missing_id_only_for_risk_engine_policy() -> None:
+def test_exec_place_input_allows_risk_engine_to_mint_approval() -> None:
     request = PlaceIn(
         ticket_id="SOL-20261104-001",
         mint=MINT,
