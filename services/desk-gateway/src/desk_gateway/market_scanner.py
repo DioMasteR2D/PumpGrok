@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Any
 
@@ -215,7 +216,7 @@ def search_market(query: str, limit: int = 20) -> dict[str, Any]:
 
 # Shared market-home snapshot cache: the Android home and Market tab reuse one
 # provider snapshot instead of multiplying upstream requests during navigation.
-_HOME_CACHE_LOCK = __import__("threading").Lock()
+_HOME_CACHE_LOCK = threading.Lock()
 _HOME_CACHE: dict[str, Any] = {"at": 0.0, "value": None}
 
 
@@ -241,7 +242,7 @@ def _agent_market_decisions(row: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-def market_home(limit: int = 20) -> dict[str, Any]:
+def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915
     """Aggregate live Solana trends from GeckoTerminal, DexScreener, Jupiter and PumpPortal."""
     import copy
     from desk_gateway.market_stream import snapshot as pumpportal_snapshot
