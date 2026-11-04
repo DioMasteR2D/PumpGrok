@@ -82,6 +82,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
   return if(arr==null) emptyList() else (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { DeskTool(it.optString("name"),it.optString("description"),it.optJSONObject("inputSchema")?:JSONObject()) } }
  }
  suspend fun call(name:String,args:JSONObject=JSONObject()):JSONObject=rpc("tools/call",JSONObject().put("name",name).put("arguments",args)).optJSONObject("result")?:JSONObject()
+ suspend fun marketCandidates():JSONObject=withContext(Dispatchers.IO) {
+  val req=Request.Builder().url("${base.trimEnd("/")}/market/candidates?limit=12").header("Authorization","Bearer $token").get().build()
+  http.newCall(req).execute().use { res ->
+   val txt=res.body?.string().orEmpty()
+   check(res.isSuccessful) { "Market scanner HTTP ${res.code}: ${txt.take(250)}" }
+   JSONObject(txt)
+  }
+ }
  suspend fun bloomStatus():JSONObject=withContext(Dispatchers.IO) {
   val req=Request.Builder().url("${base.trimEnd('/')}/bloom/status").header("Authorization","Bearer $token").get().build()
   http.newCall(req).execute().use { res ->
@@ -115,7 +123,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
  var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
  var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
- var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }
+ var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var marketMessage by remember { mutableStateOf("Market scanner not started") }
  var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
@@ -159,7 +167,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    message="Auto diagnostics complete · ${health.count{it.value.startsWith("ONLINE")}}/10 seats online · ${reports.size} checks"
   }
  }
- val tabs=listOf("Home","Agents","Activity","Tools","Rules")
+ val tabs=listOf("Home","Agents","Activity","Tools","Rules","Market")
  Scaffold(containerColor=Bg,bottomBar={NavigationBar(containerColor=Color(0xFF101219),contentColor=Color.White){
   tabs.forEachIndexed { i,s -> NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Text(listOf("⌂","✣","⌁","▦","⚙")[i],fontSize=20.sp)},label={Text(s,fontSize=10.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=Red,indicatorColor=Color(0xFF35202A),selectedTextColor=Color.White,unselectedTextColor=Muted)) }
  }}) { pad ->
