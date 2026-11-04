@@ -19,7 +19,7 @@ from pumpgrok.core.risk_budget import RiskBudget
 from pumpgrok.ledger.autonomy import read_autonomy
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import FixtureClock
-from pumpgrok.tools.exec.place import PlaceIn
+from pumpgrok.tools.exec.place import PlaceIn, _request_of
 
 MINT = "So11111111111111111111111111111111111111112"
 DECISION = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -71,3 +71,4 @@ def test_exec_place_accepts_missing_id_only_for_risk_engine_policy() -> None:
         max_slippage_bps=50,
     )
     assert request.approval_id is None
+    assert _request_of(request).approval_id is None
