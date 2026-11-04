@@ -110,13 +110,17 @@ class DeskClient(private val base:String,private val seat:String,private val tok
 
 @Composable private fun App(){
  val context = LocalContext.current
+ // Encrypted preferences are optional: some devices/Keystore states can throw during
+ // first Activity composition. Never let credential storage crash the launcher.
  val securePrefs = remember(context) {
-  val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
-  EncryptedSharedPreferences.create(context, "grokbot_secure_prefs", masterKey,
-   EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-   EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+  runCatching {
+   val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+   EncryptedSharedPreferences.create(context, "grokbot_secure_prefs", masterKey,
+    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+  }.getOrNull()
  }
- var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf(securePrefs.getString("gateway_token", "") ?: "") }
+ var gateway by remember { mutableStateOf("https://diomaster2d-pumpgrok-gateway.onrender.com") }; var seat by remember { mutableStateOf("chief") }; var token by remember { mutableStateOf(securePrefs?.getString("gateway_token", "") ?: "") }
  var tools by remember { mutableStateOf(emptyList<DeskTool>()) }; var client by remember { mutableStateOf<DeskClient?>(null) }
  var status by remember { mutableStateOf("OFFLINE · PAPER MODE") }; var message by remember { mutableStateOf("Σύνδεσε το Desk Gateway για ζωντανά δεδομένα.") }
  var busy by remember { mutableStateOf(false) }; var tab by remember { mutableIntStateOf(0) }
@@ -132,7 +136,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    val base=gateway.trim().removeSuffix("/")
    val c=DeskClient(base,seat.trim(),token.trim())
    val found=c.connect()
-   securePrefs.edit().putString("gateway_token", token.trim()).apply()
+   securePrefs?.edit()?.putString("gateway_token", token.trim())?.apply()
    client=c;tools=found;status="CONNECTED · LIVE LOCKED"
    message="Αυτόματη σύνδεση επιτυχής · ${found.size} εργαλεία · ${seat.uppercase()}"
    equity="--";cash="--";pnl="--"
