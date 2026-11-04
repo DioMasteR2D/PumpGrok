@@ -326,7 +326,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      if(tools.isEmpty()) item { CardBox { Text("Δεν φορτώθηκαν εργαλεία. Έλεγξε τη σύνδεση από Rules.",color=Muted) } }
      items(tools){t->CardBox { Column(Modifier.fillMaxWidth().clickable { selectedTool=t.name; toolArgs="{}"; toolOutput="" },verticalArrangement=Arrangement.spacedBy(5.dp)) { Text(t.name,color=Green,fontWeight=FontWeight.Bold); Text(t.description,color=Muted,fontSize=12.sp); Text("TAP TO SELECT",fontSize=9.sp,color=Blue) } } }
     }
-    else -> {
+    4 -> {
      item { Text("DESK CONNECTION",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
       Text("Gateway HTTPS URL",color=Muted,fontSize=12.sp);OutlinedTextField(gateway,{gateway=it},modifier=Modifier.fillMaxWidth(),singleLine=true,placeholder={Text("https://your-secure-gateway")})
@@ -346,6 +346,46 @@ class DeskClient(private val base:String,private val seat:String,private val tok
             Text("Το token μένει μόνο στη μνήμη της εφαρμογής. Μην βάλεις seed phrase ή private key.",fontSize=11.sp,color=Green)
      }}}
      item { CardBox { Text("Live trading remains locked. Never reuse a token previously embedded in an APK; rotate gateway seat tokens in Render.",color=Red,fontSize=12.sp) } }
+    }
+    else -> {
+     item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+      Column { Text("SOLANA MARKET",fontSize=20.sp,fontWeight=FontWeight.Bold); Text("MULTI-SOURCE · PAPER ONLY",fontSize=10.sp,color=Muted) }
+      Text("SCANNER",fontSize=10.sp,color=Green)
+     } }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text(marketMessage,fontSize=11.sp,color=Muted)
+      Text("LIQUIDITY >= $40K · MINT/FREEZE REVOKED · TOP10 <=25% · SCORE >=70",fontSize=10.sp,color=Blue)
+      Text("TP +70%…+130% · SL -6% · TRAIL -12% · SIZE 8% EQUITY",fontSize=10.sp,color=Green)
+      Button(onClick={run {
+       val c=DeskClient(gateway.trim().removeSuffix("/"),"scout",token.trim())
+       c.connect()
+       marketData=c.marketCandidates()
+       val count=marketData?.optInt("candidate_count",0) ?: 0
+       marketMessage="Updated · $count candidates · read-only scanner"
+       activity=(listOf("MARKET SCAN · $count candidates") + activity).take(30)
+      }},enabled=!busy&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"SCANNING..." else "SCAN MARKET NOW")}
+     } } }
+     val candidates=marketData?.optJSONArray("candidates")
+     if(candidates==null || candidates.length()==0) item { CardBox { Text("No market data loaded. Tap SCAN MARKET NOW.",fontSize=12.sp,color=Muted) } }
+     else items(candidates.length()) { idx ->
+      val coin=candidates.optJSONObject(idx) ?: JSONObject()
+      val checks=coin.optJSONObject("checks") ?: JSONObject()
+      val onchain=coin.optJSONObject("onchain") ?: JSONObject()
+      val mint=coin.optString("mint")
+      val liq=coin.optDouble("liquidity_usd",Double.NaN)
+      val price=coin.optDouble("price_usd",Double.NaN)
+      CardBox { Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+       Text(coin.optString("symbol","—")+" · "+coin.optString("name","Unknown"),fontWeight=FontWeight.Bold,color=Color.White)
+       Text(mint.take(7)+"…"+mint.takeLast(5),fontSize=9.sp,color=Muted)
+       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+        Metric("PRICE",if(price.isFinite()) "$"+String.format(java.util.Locale.US,"%.8f",price) else "N/A",Blue)
+        Metric("LIQUIDITY",if(liq.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",liq) else "N/A",Color.White)
+        Metric("AI SCORE",if(coin.isNull("ai_score")) "N/A" else coin.optString("ai_score"),Red)
+       }
+       Text("Mint revoked: "+checks.optBoolean("mint_authority",false)+" · Freeze revoked: "+checks.optBoolean("freeze_authority",false)+" · Top10: "+(if(onchain.isNull("top10_share"))"N/A" else String.format(java.util.Locale.US,"%.1f%%",onchain.optDouble("top10_share")*100)),fontSize=10.sp,color=Muted)
+       Text("PAPER BUY DISABLED · "+(coin.optJSONArray("blockers")?.let { a -> (0 until a.length()).joinToString { a.optString(it) } } ?: "Awaiting checks"),fontSize=10.sp,color=Red)
+      } }
+     }
     }
    }
   }
