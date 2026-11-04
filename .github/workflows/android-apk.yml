@@ -14,7 +14,21 @@ jobs:
         with: { distribution: temurin, java-version: "17" }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
-      - run: gradle -p android assembleDebug
+      # Retry transient repository throttling (HTTP 429) instead of failing the APK build.
+      - name: Build debug APK (retry transient dependency throttling)
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            echo "Android build attempt ${attempt}/3"
+            if gradle -p android assembleDebug --no-daemon; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "Android build failed after 3 attempts"
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: DioMasteR2D-Grokbot-debug-apk
