@@ -911,7 +911,7 @@ def create_server(  # noqa: PLR0913 - keyword-only wiring inputs, one call site
         "global_map": cell["global_map"],
         "owner_loop": owner_loop,
         "kill_poll_task": cell["kill_poll_task"],
-        "pumpportal_task": cell["pumpportal_task"],
+        "pumpportal_task": cell.get("pumpportal_task"),
         "clock": active_clock,
         "shorts": short_to_seat(config.contracts_dir),
     }
