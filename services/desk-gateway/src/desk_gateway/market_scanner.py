@@ -267,7 +267,7 @@ def market_home(limit: int = 20) -> dict[str, Any]:
             (GECKO_NEW_POOLS, "GeckoTerminal", "NEW POOL"),
         ):
             try:
-                response = client.get(endpoint, headers={"Accept": "application/json;version=20230302"})
+                response = client.get(endpoint, headers={"Accept": "application/json;version=20230203"})
                 response.raise_for_status()
                 payload = response.json()
                 included = {item.get("id"): item for item in payload.get("included", []) if isinstance(item, dict)}
@@ -295,7 +295,6 @@ def market_home(limit: int = 20) -> dict[str, Any]:
                         row["source"].append(label)
                     if kind == "TRENDING":
                         row["trend"] = kind
-                    row["url"] = row["url"] or attrs.get("pool_created_at")
                     count += 1
                 providers.append({"name": label + " " + kind.lower(), "status": "OK", "items": count})
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
