@@ -586,7 +586,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
   Column(horizontalAlignment=Alignment.CenterHorizontally) {
    Text("DioMasteR2D",fontSize=17.sp,fontWeight=FontWeight.Bold,color=Color.White)
    Text("10 AGENT NETWORK",fontSize=9.sp,color=Green,letterSpacing=1.5.sp)
-   Text("${statuses.values.count{it.startsWith("ONLINE")}} / 10 ONLINE",fontSize=10.sp,color=Muted)
+   Text("${statuses.values.count{it.startsWith("CONNECTED")}} / 10 ONLINE",fontSize=10.sp,color=Muted)
   }
   names.forEachIndexed { i,name ->
    val radians=Math.toRadians((i*36.0+angle-90.0))
@@ -594,7 +594,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    val x=(cos(radians)*radius).dp
    val y=(sin(radians)*radius).dp
    Column(Modifier.offset(x=x,y=y).width(58.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-    Box(Modifier.size(34.dp).background(colors[i].copy(alpha=if(statuses[name.lowercase()]?.startsWith("ONLINE")==true) .25f else .08f),RoundedCornerShape(50)),contentAlignment=Alignment.Center) {
+    Box(Modifier.size(34.dp).background(colors[i].copy(alpha=if(statuses[name.lowercase()]?.startsWith("CONNECTED")==true) .25f else .08f),RoundedCornerShape(50)),contentAlignment=Alignment.Center) {
      Text("✦",fontSize=18.sp,color=colors[i])
     }
     Text(name,fontSize=7.sp,color=if(statuses[name.lowercase()]?.startsWith("ONLINE")==true) Green else Muted,maxLines=1)
