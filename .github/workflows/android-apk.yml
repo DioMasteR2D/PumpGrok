@@ -1,5 +1,5 @@
 name: Android companion APK
-run-name: DioMasteR2D live-market home APK
+run-name: DioMasteR2D live-market home APK v2
 on:
   workflow_dispatch:
   push:
