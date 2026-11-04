@@ -137,7 +137,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    val c=DeskClient(base,seat.trim(),token.trim())
    val found=c.connect()
    securePrefs?.edit()?.putString("gateway_token", token.trim())?.apply()
-   client=c;tools=found;status="CONNECTED · LIVE LOCKED"
+   client=c;tools=found;status="CONNECTED · BLOOM ONLY · EXECUTION LOCKED"
    message="Αυτόματη σύνδεση επιτυχής · ${found.size} εργαλεία · ${seat.uppercase()}"
    equity="--";cash="--";pnl="--"
    val seats=listOf("chief","scout","risk","whale","sniper","rug","exit","shill","signal","journal")
@@ -178,7 +178,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
   LazyColumn(Modifier.fillMaxSize().padding(pad).background(Bg).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(top=18.dp,bottom=24.dp)){
    item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
     Column { Text("DioMasteR2D Grokbot Trade",fontSize=20.sp,fontWeight=FontWeight.Bold);Text("SOLANA · SECURE DESK",fontSize=10.sp,color=Muted,letterSpacing=2.sp) }
-    Column(horizontalAlignment=Alignment.End){Text("●  "+status,fontSize=10.sp,color=if(status.startsWith("CONNECTED")) Green else Red);Text("LIVE LOCKED",fontSize=10.sp,color=Red)}
+    Column(horizontalAlignment=Alignment.End){Text("●  "+status,fontSize=10.sp,color=if(status.startsWith("CONNECTED")) Green else Red);Text("BLOOM ONLY · EXECUTION LOCKED",fontSize=10.sp,color=Red)}
    }}
    when(tab){
     0 -> {
@@ -268,9 +268,9 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      } }
     }
     2 -> {
-     item { Text("ACTIVITY & PAPER LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
+     item { Text("ACTIVITY & EXECUTION LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-      Text("REAL PAPER EXECUTION HISTORY",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text("VERIFIED EXECUTION HISTORY",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
       Text("Οι εγγραφές προέρχονται από το append-only ledger του server. Δεν εμφανίζονται εικονικές κινήσεις όταν δεν υπάρχουν fills.",fontSize=10.sp,color=Muted)
       Button(onClick={run {
        val base=gateway.trim().removeSuffix("/")
@@ -345,15 +345,15 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         equity="--";cash="--";pnl="--";activity=listOf("Gateway connected · ${found.size} tools loaded · ${seat.uppercase()} seat")
       }},enabled=!busy&&gateway.isNotBlank()&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"CONNECTING..." else "CONNECT DESK")}
       Text(message,fontSize=11.sp,color=Muted)
-      Text("Phantom wallet: secure mobile deeplink handshake is not yet enabled in this build. Never enter a seed phrase or private key here.",fontSize=11.sp,color=Green)
-      Text("LIVE TRADING LOCKED · Bloom execution is not connected in this build.",fontSize=11.sp,color=Red)
+      Text("BLOOM WALLET ONLY · All bot transactions will route through the Bloom server API. No Phantom connection or seed phrase is used.",fontSize=11.sp,color=Green)
+      Text("BLOOM EXECUTION NOT ACTIVE · BUY/SELL remains locked until the server adapter, risk checks and on-chain confirmation are tested.",fontSize=11.sp,color=Red)
             Text("Το token μένει μόνο στη μνήμη της εφαρμογής. Μην βάλεις seed phrase ή private key.",fontSize=11.sp,color=Green)
      }}}
      item { CardBox { Text("Live trading remains locked. Never reuse a token previously embedded in an APK; rotate gateway seat tokens in Render.",color=Red,fontSize=12.sp) } }
     }
     else -> {
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-      Column { Text("SOLANA MARKET",fontSize=20.sp,fontWeight=FontWeight.Bold); Text("MULTI-SOURCE · PAPER ONLY",fontSize=10.sp,color=Muted) }
+      Column { Text("SOLANA MARKET",fontSize=20.sp,fontWeight=FontWeight.Bold); Text("MULTI-SOURCE · BLOOM-ONLY EXECUTION TARGET",fontSize=10.sp,color=Muted) }
       Text("SCANNER",fontSize=10.sp,color=Green)
      } }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -387,7 +387,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         Metric("AI SCORE",if(coin.isNull("ai_score")) "N/A" else coin.optString("ai_score"),Red)
        }
        Text("Mint revoked: "+checks.optBoolean("mint_authority",false)+" · Freeze revoked: "+checks.optBoolean("freeze_authority",false)+" · Top10: "+(if(onchain.isNull("top10_share"))"N/A" else String.format(java.util.Locale.US,"%.1f%%",onchain.optDouble("top10_share")*100)),fontSize=10.sp,color=Muted)
-       Text("PAPER BUY DISABLED · "+(coin.optJSONArray("blockers")?.let { a -> (0 until a.length()).joinToString { a.optString(it) } } ?: "Awaiting checks"),fontSize=10.sp,color=Red)
+       Text("BUY DISABLED · "+(coin.optJSONArray("blockers")?.let { a -> (0 until a.length()).joinToString { a.optString(it) } } ?: "Awaiting checks"),fontSize=10.sp,color=Red)
       } }
      }
     }
