@@ -270,7 +270,11 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
             (GECKO_NEW_POOLS, "GeckoTerminal", "NEW POOL"),
         ):
             try:
-                response = client.get(endpoint, headers={"Accept": "application/json;version=20230203"})
+                response = client.get(
+                    endpoint,
+                    params={"include": "base_token"},
+                    headers={"Accept": "application/json;version=20230203"},
+                )
                 response.raise_for_status()
                 payload = response.json()
                 included = {item.get("id"): item for item in payload.get("included", []) if isinstance(item, dict)}
