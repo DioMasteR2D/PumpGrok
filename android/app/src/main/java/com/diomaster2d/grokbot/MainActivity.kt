@@ -183,6 +183,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  LaunchedEffect(client, tab, marketQuery) {
   val activeClient = client ?: return@LaunchedEffect
   if (tab == 5) {
+   delay(600)
    while (true) {
     try {
      val snapshot = if (marketQuery.isNotBlank()) activeClient.marketSearch(marketQuery) else activeClient.marketCandidates()
@@ -425,14 +426,15 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
        Button(onClick={run {
         require(marketQuery.isNotBlank()) { "Γράψε όνομα, σύμβολο ή mint coin." }
-        val c=DeskClient(gateway.trim().removeSuffix("/"),"scout",token.trim())
-        c.connect(); marketData=c.marketSearch(marketQuery)
+        val c=client ?: error("Συνδέσου πρώτα στο Gateway")
+        marketData=c.marketSearch(marketQuery)
         val count=marketData?.optInt("candidate_count",0) ?: 0
         marketMessage="SEARCH RESULTS · $count Solana pairs · read-only"
         activity=(listOf("MARKET SEARCH · "+marketQuery+" · "+count+" results") + activity).take(30)
        }},enabled=!busy&&token.isNotBlank()&&marketQuery.isNotBlank(),modifier=Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"SEARCHING..." else "SEARCH COINS")}
        OutlinedButton(onClick={marketQuery="";run {
-        val c=DeskClient(gateway.trim().removeSuffix("/"),"scout",token.trim());c.connect();marketData=c.marketCandidates()
+        val c=client ?: error("Συνδέσου πρώτα στο Gateway")
+        marketData=c.marketCandidates()
         marketMessage="LIVE DISCOVERY · latest Solana pools"
        }},enabled=!busy&&token.isNotBlank(),modifier=Modifier.weight(1f)){Text("LATEST COINS")}
       }
@@ -440,8 +442,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Text("LIQUIDITY >= USD 40K · MINT/FREEZE REVOKED · TOP10 <=25% · SCORE >=70",fontSize=10.sp,color=Blue)
       Text("TP +70%…+130% · SL -6% · TRAIL -12% · SIZE 8% EQUITY",fontSize=10.sp,color=Green)
       Button(onClick={run {
-       val c=DeskClient(gateway.trim().removeSuffix("/"),"scout",token.trim())
-       c.connect()
+       val c=client ?: error("Συνδέσου πρώτα στο Gateway")
        marketData=c.marketCandidates()
        val count=marketData?.optInt("candidate_count",0) ?: 0
        marketMessage="Updated · $count candidates · read-only scanner"
