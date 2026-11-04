@@ -256,9 +256,50 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      } }
     }
     2 -> {
-     item { Text("ACTIVITY & LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
-     if(activity.isEmpty()) item { CardBox { Text("Δεν υπάρχουν δεδομένα ledger μέχρι να συνδεθεί ο server.",color=Muted) } }
-     items(activity){line->CardBox{Text(line,fontSize=12.sp)}}
+     item { Text("ACTIVITY & PAPER LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text("REAL PAPER EXECUTION HISTORY",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text("Οι εγγραφές προέρχονται από το append-only ledger του server. Δεν εμφανίζονται εικονικές κινήσεις όταν δεν υπάρχουν fills.",fontSize=10.sp,color=Muted)
+      Button(onClick={run {
+       val base=gateway.trim().removeSuffix("/")
+       val ledgerClient=DeskClient(base,"risk",token.trim())
+       val riskTools=ledgerClient.connect()
+       require(riskTools.any { it.name=="portfolio_ledger_read" }) { "Το risk seat δεν διαθέτει portfolio ledger read." }
+       val response=ledgerClient.call("portfolio_ledger_read",JSONObject().put("limit",100))
+       val content=response.optJSONArray("content")
+       val raw=content?.optJSONObject(0)?.optString("text").orEmpty()
+       check(raw.isNotBlank()) { "Ο server δεν επέστρεψε δεδομένα ledger." }
+       val data=JSONObject(raw)
+       val events=data.optJSONArray("events") ?: org.json.JSONArray()
+       val rows=mutableListOf<String>()
+       for(i in 0 until events.length()) {
+        val event=events.optJSONObject(i) ?: continue
+        val payload=event.optJSONObject("payload") ?: JSONObject()
+        val type=event.optString("type","Event")
+        val side=payload.optString("side","").uppercase()
+        val mint=payload.optString("mint","")
+        val symbol=payload.optString("symbol","")
+        val asset=if(symbol.isNotBlank()) symbol else if(mint.length>12) mint.take(6)+"…"+mint.takeLast(4) else mint.ifBlank { "—" }
+        val source=event.optString("source","paper").uppercase()
+        val time=event.optString("ts_utc","")
+        val detail=when(type) {
+         "FillRecorded" -> "$side FILLED · $asset · \${payload.optString("filled_fraction","—")} filled"
+         "OrderPlaced" -> "$side ORDER · $asset · \${payload.optString("ticket_id","")}"
+         "OrderRejected" -> "ORDER REJECTED · \${payload.optString("reason","unknown")} · $asset"
+         "PositionOpened" -> "POSITION OPENED · $asset"
+         "PositionClosed" -> "POSITION CLOSED · $asset · \${payload.optString("reason","")}"
+         "JournalNote" -> "AGENT NOTE · \${payload.optString("note_kind","note")} · $asset"
+         "Escalation" -> "RISK ALERT · $asset"
+         else -> "$type · $asset"
+        }
+        rows.add("$time\n$detail\nSOURCE: $source")
+       }
+       activity=rows
+       message=if(rows.isEmpty()) "Ledger connected · no paper trades recorded yet." else "Loaded \${rows.size} real ledger events."
+      }},enabled=!busy&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"LOADING LEDGER..." else "REFRESH PAPER ACTIVITY")}
+     } } }
+     if(activity.isEmpty()) item { CardBox { Text("Δεν υπάρχουν ακόμη εγγεγραμμένες κινήσεις. Πάτησε REFRESH PAPER ACTIVITY για έλεγχο.",color=Muted) } }
+     items(activity){line->CardBox{Text(line,fontSize=12.sp,color=Color.White)}}
     }
     3 -> {
      item { Text("PUMPGROK TOOLS · ${tools.size}",fontSize=20.sp,fontWeight=FontWeight.Bold) }
