@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import os
+import sys
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "services" / "desk-gateway" / "src"))
 
 from desk_gateway.server import _enable_autonomous_paper
 from pumpgrok.config.settings import load_settings
