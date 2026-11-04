@@ -252,7 +252,7 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
     now = time.time()
     with _HOME_CACHE_LOCK:
         cached = _HOME_CACHE.get("value")
-        if cached is not None and now - float(_HOME_CACHE.get("at", 0.0)) < 12:
+        if cached is not None and now - float(_HOME_CACHE.get("at", 0.0)) < 30:
             result = copy.deepcopy(cached)
             result["cache_age_ms"] = int((now - float(_HOME_CACHE["at"])) * 1000)
             return result
