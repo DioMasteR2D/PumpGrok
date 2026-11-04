@@ -13,13 +13,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "services" / "desk-gateway" / "src"))
 
-from desk_gateway.server import _enable_autonomous_paper
-from pumpgrok.config.settings import load_settings
-from pumpgrok.core.risk_budget import RiskBudget
-from pumpgrok.ledger.autonomy import read_autonomy
-from pumpgrok.ledger.store import LedgerStore
-from pumpgrok.replay.clock import FixtureClock
-from pumpgrok.tools.exec.place import PlaceIn, _request_of
+from desk_gateway.server import _enable_autonomous_paper  # noqa: E402
+from pumpgrok.config.settings import load_settings  # noqa: E402
+from pumpgrok.core.risk_budget import RiskBudget  # noqa: E402
+from pumpgrok.ledger.autonomy import read_autonomy  # noqa: E402
+from pumpgrok.ledger.store import LedgerStore  # noqa: E402
+from pumpgrok.replay.clock import FixtureClock  # noqa: E402
+from pumpgrok.tools.exec.place import PlaceIn, _request_of  # noqa: E402
 
 MINT = "So11111111111111111111111111111111111111112"
 DECISION = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
