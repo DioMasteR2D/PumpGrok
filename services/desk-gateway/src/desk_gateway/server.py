@@ -38,7 +38,8 @@ import httpx
 from pydantic import ValidationError
 
 from desk_gateway.config import GatewayConfig
-from desk_gateway.market_scanner import scan_market, search_market
+from desk_gateway.market_scanner import market_home, scan_market, search_market
+from desk_gateway.market_stream import run_pumpportal_stream
 from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import (
     default_contracts_dir,
@@ -331,6 +332,24 @@ class _Handler(BaseHTTPRequestHandler):
         state = self.server.gateway_state  # type: ignore[attr-defined]
         if path == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
+            return
+        if path == "/market/home":
+            presented = _presented_token(self.headers)
+            allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
+            if not presented or not any(token and hmac.compare_digest(presented.encode(), token.encode()) for token in allowed):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief or scout token required"}})
+                return
+            try:
+                from urllib.parse import parse_qs, urlsplit
+                query = parse_qs(urlsplit(self.path).query)
+                limit = int(query.get("limit", ["20"])[0])
+                result = market_home(limit=limit)
+                self._send_json(200, result)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+            except Exception:
+                log.exception("market home aggregation failed")
+                self._send_json(502, {"error": "Market home unavailable"})
             return
         if path == "/market/search":
             presented = _presented_token(self.headers)
@@ -842,6 +861,8 @@ def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call s
             cell["kill_poll_task"] = loop.create_task(
                 _poll_kill_sources(cell["engine"], kill_poll_interval_s)
             )
+            # One persistent PumpPortal discovery stream feeds every authenticated client.
+            cell["pumpportal_task"] = loop.create_task(run_pumpportal_stream())
         except Exception as exc:  # fail fast: never leave ready unset
             cell["error"] = exc
         finally:
@@ -890,6 +911,7 @@ def create_server(  # noqa: PLR0913 - keyword-only wiring inputs, one call site
         "global_map": cell["global_map"],
         "owner_loop": owner_loop,
         "kill_poll_task": cell["kill_poll_task"],
+        "pumpportal_task": cell["pumpportal_task"],
         "clock": active_clock,
         "shorts": short_to_seat(config.contracts_dir),
     }
@@ -902,9 +924,12 @@ def close_server(server: ThreadingHTTPServer) -> None:
     state = server.gateway_state  # type: ignore[attr-defined]
     loop = state.get("owner_loop")
     poll_task = state.get("kill_poll_task")
-    if loop is not None and poll_task is not None:
-        future = asyncio.run_coroutine_threadsafe(_cancel_and_wait(poll_task), loop)
-        future.result(timeout=_CLOSE_TIMEOUT_S)
+    pump_task = state.get("pumpportal_task")
+    if loop is not None:
+        for task in (poll_task, pump_task):
+            if task is not None:
+                future = asyncio.run_coroutine_threadsafe(_cancel_and_wait(task), loop)
+                future.result(timeout=_CLOSE_TIMEOUT_S)
     server.shutdown()
     server.server_close()
     if loop is not None:
