@@ -36,7 +36,7 @@ EXIT_SEAT = "bot-06-exit"
 
 
 class PlaceIn(ToolInput):
-    """One paper order. ``approval_id`` (g6) is required, never optional."""
+    """One paper order. Manual mode needs a human approval; autonomous-paper lets RiskEngine mint one."""
 
     ticket_id: str = Field(pattern=r"^SOL-\d{8}-\d{3}$")
     mint: MintStr
@@ -45,7 +45,7 @@ class PlaceIn(ToolInput):
     size_lamports: int | None = Field(default=None, gt=0)
     token_units: int | None = Field(default=None, gt=0)
     max_slippage_bps: int = Field(ge=1, le=10_000)
-    approval_id: str = Field(pattern=r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
+    approval_id: str | None = Field(default=None, pattern=r"^apr-[0-9A-HJKMNP-TV-Z]{26}$")
     quote_id: str | None = None
     # Set only by the exit seat's rule engine (TOOL-009). The gateway schema omits it.
     exit_reason: ExitRuleReason | None = None
@@ -80,7 +80,7 @@ class PlaceOut(ToolOutput):
 PLACE_SPEC = ToolSpec(
     name="exec.place",
     description=(
-        "Place exactly one paper order; fail-closed on approval, decision key, "
+        "Place exactly one paper order; fail-closed on risk approval, decision key, "
         "and exit-BUY. Atomic approval consume-and-order; repeats return first."
     ),
     input_model=PlaceIn,
