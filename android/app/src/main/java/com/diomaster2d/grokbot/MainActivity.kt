@@ -90,6 +90,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    JSONObject(txt)
   }
  }
+ suspend fun marketHome():JSONObject=withContext(Dispatchers.IO) {
+  val req=Request.Builder().url("${base.trimEnd('/')}/market/home?limit=20").header("Authorization","Bearer $token").get().build()
+  http.newCall(req).execute().use { res ->
+   val txt=res.body?.string().orEmpty()
+   check(res.isSuccessful) { "Market home HTTP ${res.code}: ${txt.take(250)}" }
+   JSONObject(txt)
+  }
+ }
  suspend fun marketSearch(query:String):JSONObject=withContext(Dispatchers.IO) {
   val encoded=java.net.URLEncoder.encode(query.trim(),"UTF-8")
   val req=Request.Builder().url("${base.trimEnd('/')}/market/search?q=$encoded&limit=20").header("Authorization","Bearer $token").get().build()
@@ -136,7 +144,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
  var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
  var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
- var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
+ var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketMessage by remember { mutableStateOf("Waiting for live multi-source market feed") }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
  var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
