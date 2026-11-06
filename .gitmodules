@@ -1,0 +1,15 @@
+[submodule "vendor/gmgn-skills"]
+	path = vendor/gmgn-skills
+	url = https://github.com/GMGNAI/gmgn-skills.git
+[submodule "vendor/pumpfun-bonkfun-bot"]
+	path = vendor/pumpfun-bonkfun-bot
+	url = https://github.com/chainstacklabs/pumpfun-bonkfun-bot.git
+[submodule "vendor/sol-trade-sdk"]
+	path = vendor/sol-trade-sdk
+	url = https://github.com/0xfnzero/sol-trade-sdk.git
+[submodule "vendor/eliza"]
+	path = vendor/eliza
+	url = https://github.com/elizaos/eliza.git
+[submodule "vendor/OpenAlice"]
+	path = vendor/OpenAlice
+	url = https://github.com/TraderAlice/OpenAlice.git
