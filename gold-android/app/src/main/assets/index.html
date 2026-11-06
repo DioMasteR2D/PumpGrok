@@ -1,35 +1,58 @@
 <!doctype html>
-<html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DioMasteR GOLD AI</title>
+<html lang="el">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b0d"><title>DioMasteR2D • Grok Bot</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#090909;color:#f5f0df;font:15px Arial,sans-serif;padding:18px}
-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #5d491d;padding-bottom:14px}
-h1{font-size:22px;color:#e2bd55;margin:0}.tag{color:#101010;background:#e2bd55;border-radius:20px;padding:7px 11px;font-size:11px;font-weight:bold}
-small,.muted{color:#a99e83}.price{font-size:34px;color:#f0d27b;margin:18px 0 4px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
-.card{background:#171613;border:1px solid #40351d;border-radius:13px;padding:14px}.label{font-size:12px;color:#a99e83}.value{font-size:21px;margin-top:8px;color:#f1d27b}
-button{border:0;border-radius:10px;padding:14px;font-weight:bold;font-size:15px;width:100%;margin:5px 0}
-.buy{background:#d6b24e;color:#14110a}.sell{background:#38342a;color:#fff}.reset{background:#211e18;color:#d8cba8}
-.note{font-size:12px;line-height:1.5;color:#aaa18e;background:#171613;padding:13px;border-radius:10px;margin-top:18px}
-#positions{font-size:13px;color:#d9cfb5;line-height:1.7}
-</style></head><body>
-<header><div><h1>DioMasteR GOLD AI</h1><small>XAUUSD • Paper Trading</small></div><span class="tag">DEMO ONLY</span></header>
-<div class="price" id="gold">$2,750.00</div><div class="muted">Ενδεικτική τιμή χρυσού — προσομοίωση, όχι live feed</div>
-<div class="grid">
-<div class="card"><div class="label">Εικονικό κεφάλαιο</div><div class="value" id="balance">$10,000.00</div></div>
-<div class="card"><div class="label">Ημερήσιο P/L</div><div class="value" id="pnl">$0.00</div></div>
-<div class="card"><div class="label">RSI (ενδεικτικό)</div><div class="value">52.4</div></div>
-<div class="card"><div class="label">Τάση EMA</div><div class="value">NEUTRAL</div></div>
-</div>
-<div class="card"><b>Εικονικές συναλλαγές</b><p class="muted">Δοκιμή στρατηγικής χωρίς σύνδεση broker ή πραγματικές εντολές.</p>
-<button class="buy" onclick="trade('BUY')">ΕΙΚΟΝΙΚΟ BUY</button><button class="sell" onclick="trade('SELL')">ΕΙΚΟΝΙΚΟ SELL</button>
-<button class="reset" onclick="resetPaper()">ΕΠΑΝΑΦΟΡΑ DEMO</button></div>
-<div class="card" style="margin-top:12px"><b>Ανοιχτές θέσεις</b><div id="positions">Καμία θέση ακόμη.</div></div>
-<div class="note">ΠΡΟΣΟΧΗ: Αυτή η έκδοση είναι offline demo με ενδεικτική τιμή και απλές εικονικές εγγραφές. Δεν έχει live δεδομένα, πραγματικό AI, MT5 ή σύνδεση broker. Δεν πραγματοποιεί πραγματικές συναλλαγές. Η σύνδεση MT5 θα προστεθεί μόνο σε ξεχωριστή, ελεγχόμενη demo έκδοση.</div>
+:root{color-scheme:dark;--bg:#080b0d;--panel:#101619;--panel2:#131b1e;--line:#263438;--muted:#8b9a9b;--text:#edf5f2;--green:#36d99a;--gold:#e4c76a;--red:#ff7272}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px Inter,Roboto,Arial,sans-serif}
+body{padding:env(safe-area-inset-top) 14px calc(18px + env(safe-area-inset-bottom));max-width:600px;margin:auto}
+header{height:58px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1b292c;position:sticky;top:0;background:#080b0df2;z-index:5}
+.brand{display:flex;align-items:center;gap:9px}.mark{width:36px;height:36px;border-radius:12px;background:linear-gradient(145deg,#1b2927,#0e1516);border:1px solid #365247;display:grid;place-items:center;font-size:20px;box-shadow:0 0 20px #1a8e5b22}
+.brand strong{font-size:16px;letter-spacing:.2px}.brand small{display:block;color:var(--muted);font-size:10px;margin-top:2px;letter-spacing:1.1px}
+.status{font-size:10px;font-weight:800;color:var(--gold);border:1px solid #66552b;background:#2b2514;border-radius:20px;padding:7px 10px;letter-spacing:.6px}
+.ticker{display:flex;gap:7px;overflow:hidden;padding:11px 0 4px;white-space:nowrap}.chip{background:#11191b;border:1px solid #263437;border-radius:20px;padding:6px 9px;font-size:10px;color:#b5c5c0}.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#e3b65a;margin-right:5px;vertical-align:1px}
+.hero{padding:18px 2px 12px}.eyebrow{font-size:10px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase}.balance{font-size:39px;font-weight:750;letter-spacing:-1.5px;margin:7px 0 3px}.subline{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted)}.pill{border-radius:20px;padding:4px 7px;font-size:10px;font-weight:700;background:#17211f;color:var(--green);border:1px solid #254638}
+.chartbox{background:linear-gradient(180deg,#0e1718,#0a1012);border:1px solid var(--line);border-radius:16px;padding:12px 12px 8px;margin-top:7px}.charthead{display:flex;justify-content:space-between;align-items:center}.charthead b{font-size:12px}.charthead span{font-size:10px;color:var(--muted)}svg{width:100%;height:126px;display:block;margin-top:7px}.chartfoot{display:flex;justify-content:space-between;color:#738482;font-size:9px}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.metric{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 10px;min-width:0}.metric label{font-size:9px;color:var(--muted);display:block;white-space:nowrap}.metric b{font-size:18px;display:block;margin-top:6px}.metric small{font-size:9px;color:var(--muted)}
+.section{margin-top:17px}.sectitle{display:flex;justify-content:space-between;align-items:center;margin:0 2px 9px}.sectitle b{font-size:13px}.sectitle span{font-size:10px;color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden}
+.repo{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid #1d292c}.repo:last-child{border:0}.repoicon{width:29px;height:29px;border-radius:9px;background:#192426;display:grid;place-items:center;font-size:14px;flex:none}.repoinfo{min-width:0;flex:1}.repoinfo b{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.repoinfo small{display:block;font-size:9px;color:var(--muted);margin-top:3px}.state{font-size:8px;color:#e6c36c;border:1px solid #5c4c29;background:#282315;border-radius:12px;padding:4px 6px;white-space:nowrap}
+.agentgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.agent{background:#11191b;border:1px solid #263438;border-radius:10px;padding:9px 3px;text-align:center}.agent b{display:block;font-size:9px}.agent small{display:block;color:#879794;font-size:8px;margin-top:4px}
+.config{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:12px}.config div{background:#0b1113;border-radius:10px;padding:10px}.config small{display:block;color:var(--muted);font-size:9px}.config b{display:block;margin-top:5px;font-size:14px}
+.log{padding:4px 12px}.logrow{display:flex;gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #1d292c}.logrow:last-child{border:0}.logdot{width:7px;height:7px;border-radius:50%;background:#788886;margin-top:4px;flex:none}.logrow b{font-size:10px}.logrow small{display:block;color:var(--muted);font-size:9px;margin-top:3px;line-height:1.4}
+.recap{padding:13px}.recaptop{display:flex;justify-content:space-between;align-items:center}.recaptop b{font-size:12px}.recapgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}.recapgrid div{background:#0b1113;border-radius:9px;padding:9px}.recapgrid small{display:block;color:var(--muted);font-size:9px}.recapgrid b{display:block;font-size:16px;margin-top:5px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.btn{border-radius:12px;border:1px solid #355448;background:#10231c;color:#a8f0cf;padding:13px;font-weight:700;font-size:11px}.btn.secondary{background:#11191b;border-color:#29383b;color:#c2d0cd}
+.notice{font-size:10px;line-height:1.5;color:#a3b0ad;background:#11191b;border:1px solid #29383b;border-radius:12px;padding:11px;margin-top:13px}.notice strong{color:var(--gold)}
+footer{text-align:center;color:#657572;font-size:9px;padding:18px 0 3px}
+@media(min-width:520px){body{padding-left:20px;padding-right:20px}.balance{font-size:46px}}
+</style></head>
+<body>
+<header><div class="brand"><div class="mark">🦁👑</div><div><strong>DioMasteR2D</strong><small>GROK BOT • SOLANA DESK</small></div></div><div class="status">PAPER MODE</div></header>
+<div class="ticker"><div class="chip"><i class="dot"></i>SOLANA · FEED OFF</div><div class="chip"><i class="dot"></i>PUMP.FUN · WAITING</div><div class="chip"><i class="dot"></i>GMGN · NOT CONNECTED</div></div>
+<section class="hero"><div class="eyebrow">Paper portfolio · starting balance</div><div class="balance" id="balance">$95.00</div><div class="subline"><span class="pill">+$0.00 · 0.00%</span><span>Session P/L · no trades yet</span></div></section>
+<section class="chartbox"><div class="charthead"><b>Portfolio performance</b><span>SESSION · PAPER</span></div>
+<svg viewBox="0 0 340 126" preserveAspectRatio="none" role="img" aria-label="Flat portfolio chart; no paper trades yet"><defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#32d99a" stop-opacity=".22"/><stop offset="1" stop-color="#32d99a" stop-opacity="0"/></linearGradient></defs><path d="M0 100 H340 M0 62 H340 M0 24 H340" stroke="#243236" stroke-width="1" stroke-dasharray="3 5" fill="none"/><path d="M2 92 L338 92 L338 120 L2 120Z" fill="url(#fill)"/><path d="M2 92 L338 92" stroke="#36d99a" stroke-width="2" fill="none"/><circle cx="338" cy="92" r="3.5" fill="#36d99a"/></svg><div class="chartfoot"><span>START</span><span>NO EXECUTED PAPER TRADES</span><span>NOW</span></div></section>
+<section class="metrics"><div class="metric"><label>TRADES</label><b>0</b><small>session</small></div><div class="metric"><label>MEMECOINS</label><b>0</b><small>tracked</small></div><div class="metric"><label>OPEN POSITIONS</label><b>0 / 10</b><small>paper limit</small></div></section>
+<section class="section"><div class="sectitle"><b>5 REPOSITORIES</b><span>PINNED · NOT RUNNING</span></div><div class="panel">
+<div class="repo"><div class="repoicon">◈</div><div class="repoinfo"><b>GMGNAI / gmgn-skills</b><small>Token · holders · smart money research</small></div><span class="state">PINNED</span></div>
+<div class="repo"><div class="repoicon">◎</div><div class="repoinfo"><b>chainstacklabs / pumpfun-bonkfun-bot</b><small>Pump.fun event and curve research</small></div><span class="state">PINNED</span></div>
+<div class="repo"><div class="repoicon">ϟ</div><div class="repoinfo"><b>0xfnzero / sol-trade-sdk</b><small>Solana DEX SDK · execution research</small></div><span class="state">PINNED</span></div>
+<div class="repo"><div class="repoicon">✳</div><div class="repoinfo"><b>elizaos / eliza</b><small>Agent runtime and plugin framework</small></div><span class="state">PINNED</span></div>
+<div class="repo"><div class="repoicon">◉</div><div class="repoinfo"><b>TraderAlice / OpenAlice</b><small>Research workspace and orchestration</small></div><span class="state">PINNED</span></div>
+</div></section>
+<section class="section"><div class="sectitle"><b>AI AGENT TEAM</b><span>10 SEATS · STANDBY</span></div><div class="agentgrid">
+<div class="agent"><b>CHIEF</b><small>idle</small></div><div class="agent"><b>SCOUT</b><small>idle</small></div><div class="agent"><b>RISK</b><small>veto ready</small></div><div class="agent"><b>WHALE</b><small>idle</small></div><div class="agent"><b>SNIPER</b><small>idle</small></div>
+<div class="agent"><b>RUG</b><small>idle</small></div><div class="agent"><b>EXIT</b><small>idle</small></div><div class="agent"><b>SHILL</b><small>idle</small></div><div class="agent"><b>SIGNAL</b><small>idle</small></div><div class="agent"><b>JOURNAL</b><small>idle</small></div>
+</div></section>
+<section class="section"><div class="sectitle"><b>PAPER CONFIGURATION</b><span>USER SETTINGS</span></div><div class="panel config"><div><small>TRADE SIZE</small><b>$2.00</b></div><div><small>MAX POSITIONS</small><b>10</b></div><div><small>TAKE PROFIT</small><b>+10%</b></div><div><small>STOP LOSS</small><b>-5%</b></div><div><small>DAILY LOSS CAP</small><b>$15</b></div><div><small>MODE</small><b>PAPER</b></div></div></section>
+<section class="section"><div class="sectitle"><b>GROK BOT DECISIONS</b><span>LIVE LOG · EMPTY</span></div><div class="panel log"><div class="logrow"><i class="logdot"></i><div><b>Desk initialized in safe mode</b><small>No market feed or agent run is connected to this screen yet.</small></div></div><div class="logrow"><i class="logdot"></i><div><b>Risk guard active</b><small>Real transaction signing and broadcast are not available from this Android app.</small></div></div><div class="logrow"><i class="logdot"></i><div><b>Waiting for verified data sources</b><small>Signals and P/L will appear only after they are returned by the connected backend.</small></div></div></div></section>
+<section class="section"><div class="sectitle"><b>24H RECAP</b><span>VERIFIED PAPER LEDGER</span></div><div class="panel recap"><div class="recaptop"><b>Session summary</b><span class="state">NO DATA YET</span></div><div class="recapgrid"><div><small>START</small><b>$95.00</b></div><div><small>NET WORTH</small><b id="networth">$95.00</b></div><div><small>WIN RATE</small><b>—</b></div></div></div></section>
+<div class="actions"><button class="btn" id="refresh">REFRESH STATUS</button><button class="btn secondary" id="copy">COPY DIAGNOSTICS</button></div>
+<div class="notice"><strong>HONEST DATA MODE:</strong> Η οθόνη είναι το Android dashboard shell. Τα 5 projects έχουν καρφιτσωθεί στο Git ως submodules, αλλά δεν έχουν ακόμη εγκατασταθεί/εκκινηθεί ως υπηρεσίες. Δεν εμφανίζουμε ψεύτικα live σήματα, trades ή κέρδη. Οι πραγματικές συναλλαγές παραμένουν απενεργοποιημένες.</div>
+<footer>DioMasteR2D GROK BOT · SOLANA · PAPER FIRST</footer>
 <script>
-let balance=10000, pnl=0, positions=[], price=2750;
-function render(){document.getElementById('balance').textContent='$'+balance.toFixed(2);document.getElementById('pnl').textContent='$'+pnl.toFixed(2);document.getElementById('positions').innerHTML=positions.length?positions.map((p,i)=>'#'+(i+1)+' '+p.side+' @ $'+p.entry.toFixed(2)).join('<br>'):'Καμία θέση ακόμη.'}
-function trade(side){let amount=100, units=amount/price;positions.push({side,entry:price,units});balance-=amount;render()}
-function resetPaper(){balance=10000;pnl=0;positions=[];render()}
-render();
+const refresh=document.getElementById('refresh');
+refresh.addEventListener('click',()=>{refresh.textContent='STATUS CHECKED · '+new Date().toLocaleTimeString('el-GR');});
+document.getElementById('copy').addEventListener('click',async()=>{const s='DioMasteR2D Grok Bot\nMode: PAPER\nBalance: $95.00\nTrades: 0\nOpen positions: 0/10\nRepositories: 5 pinned, not running\nBackend: not connected';try{await navigator.clipboard.writeText(s);document.getElementById('copy').textContent='COPIED';}catch(e){document.getElementById('copy').textContent='COPY UNAVAILABLE';}});
 </script></body></html>
