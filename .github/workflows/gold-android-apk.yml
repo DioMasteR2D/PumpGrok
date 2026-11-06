@@ -3,7 +3,7 @@ name: Build DioMasteR2D Grok Bot APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, "research/**"]
+    branches: [main, "research/**", "feat/**"]
     paths:
       - 'gold-android/**'
       - '.gitmodules'
