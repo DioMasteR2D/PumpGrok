@@ -1,58 +1,78 @@
 <!doctype html>
 <html lang="el">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#080b0d"><title>DioMasteR2D • Grok Bot</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f6f7">
+<title>Grok Bot · DioMasteR2D</title>
 <style>
-:root{color-scheme:dark;--bg:#080b0d;--panel:#101619;--panel2:#131b1e;--line:#263438;--muted:#8b9a9b;--text:#edf5f2;--green:#36d99a;--gold:#e4c76a;--red:#ff7272}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px Inter,Roboto,Arial,sans-serif}
-body{padding:env(safe-area-inset-top) 14px calc(18px + env(safe-area-inset-bottom));max-width:600px;margin:auto}
-header{height:58px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1b292c;position:sticky;top:0;background:#080b0df2;z-index:5}
-.brand{display:flex;align-items:center;gap:9px}.mark{width:36px;height:36px;border-radius:12px;background:linear-gradient(145deg,#1b2927,#0e1516);border:1px solid #365247;display:grid;place-items:center;font-size:20px;box-shadow:0 0 20px #1a8e5b22}
-.brand strong{font-size:16px;letter-spacing:.2px}.brand small{display:block;color:var(--muted);font-size:10px;margin-top:2px;letter-spacing:1.1px}
-.status{font-size:10px;font-weight:800;color:var(--gold);border:1px solid #66552b;background:#2b2514;border-radius:20px;padding:7px 10px;letter-spacing:.6px}
-.ticker{display:flex;gap:7px;overflow:hidden;padding:11px 0 4px;white-space:nowrap}.chip{background:#11191b;border:1px solid #263437;border-radius:20px;padding:6px 9px;font-size:10px;color:#b5c5c0}.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#e3b65a;margin-right:5px;vertical-align:1px}
-.hero{padding:18px 2px 12px}.eyebrow{font-size:10px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase}.balance{font-size:39px;font-weight:750;letter-spacing:-1.5px;margin:7px 0 3px}.subline{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted)}.pill{border-radius:20px;padding:4px 7px;font-size:10px;font-weight:700;background:#17211f;color:var(--green);border:1px solid #254638}
-.chartbox{background:linear-gradient(180deg,#0e1718,#0a1012);border:1px solid var(--line);border-radius:16px;padding:12px 12px 8px;margin-top:7px}.charthead{display:flex;justify-content:space-between;align-items:center}.charthead b{font-size:12px}.charthead span{font-size:10px;color:var(--muted)}svg{width:100%;height:126px;display:block;margin-top:7px}.chartfoot{display:flex;justify-content:space-between;color:#738482;font-size:9px}
-.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.metric{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 10px;min-width:0}.metric label{font-size:9px;color:var(--muted);display:block;white-space:nowrap}.metric b{font-size:18px;display:block;margin-top:6px}.metric small{font-size:9px;color:var(--muted)}
-.section{margin-top:17px}.sectitle{display:flex;justify-content:space-between;align-items:center;margin:0 2px 9px}.sectitle b{font-size:13px}.sectitle span{font-size:10px;color:var(--muted)}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden}
-.repo{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid #1d292c}.repo:last-child{border:0}.repoicon{width:29px;height:29px;border-radius:9px;background:#192426;display:grid;place-items:center;font-size:14px;flex:none}.repoinfo{min-width:0;flex:1}.repoinfo b{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.repoinfo small{display:block;font-size:9px;color:var(--muted);margin-top:3px}.state{font-size:8px;color:#e6c36c;border:1px solid #5c4c29;background:#282315;border-radius:12px;padding:4px 6px;white-space:nowrap}
-.agentgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.agent{background:#11191b;border:1px solid #263438;border-radius:10px;padding:9px 3px;text-align:center}.agent b{display:block;font-size:9px}.agent small{display:block;color:#879794;font-size:8px;margin-top:4px}
-.config{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:12px}.config div{background:#0b1113;border-radius:10px;padding:10px}.config small{display:block;color:var(--muted);font-size:9px}.config b{display:block;margin-top:5px;font-size:14px}
-.log{padding:4px 12px}.logrow{display:flex;gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #1d292c}.logrow:last-child{border:0}.logdot{width:7px;height:7px;border-radius:50%;background:#788886;margin-top:4px;flex:none}.logrow b{font-size:10px}.logrow small{display:block;color:var(--muted);font-size:9px;margin-top:3px;line-height:1.4}
-.recap{padding:13px}.recaptop{display:flex;justify-content:space-between;align-items:center}.recaptop b{font-size:12px}.recapgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}.recapgrid div{background:#0b1113;border-radius:9px;padding:9px}.recapgrid small{display:block;color:var(--muted);font-size:9px}.recapgrid b{display:block;font-size:16px;margin-top:5px}
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.btn{border-radius:12px;border:1px solid #355448;background:#10231c;color:#a8f0cf;padding:13px;font-weight:700;font-size:11px}.btn.secondary{background:#11191b;border-color:#29383b;color:#c2d0cd}
-.notice{font-size:10px;line-height:1.5;color:#a3b0ad;background:#11191b;border:1px solid #29383b;border-radius:12px;padding:11px;margin-top:13px}.notice strong{color:var(--gold)}
-footer{text-align:center;color:#657572;font-size:9px;padding:18px 0 3px}
-@media(min-width:520px){body{padding-left:20px;padding-right:20px}.balance{font-size:46px}}
-</style></head>
+:root{color-scheme:light;--bg:#f4f5f6;--card:#fff;--ink:#17191d;--muted:#8b9098;--line:#e7e9ec;--green:#21a873;--green2:#dff7eb;--orange:#ed922c;--red:#df6868;--blue:#4b8bd9}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:Inter,Roboto,"Arial",sans-serif}body{max-width:720px;margin:auto;padding:env(safe-area-inset-top) 0 calc(18px + env(safe-area-inset-bottom));overflow-x:hidden}
+header{height:62px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:10px}.logo{width:42px;height:42px;border-radius:12px;background:#111;color:white;display:grid;place-items:center;font-weight:900;font-size:21px;letter-spacing:-2px}.brandname{font-size:21px;font-weight:850;letter-spacing:-.8px}.agents-count{font-size:12px;color:#8b9098;margin-left:7px}.live{font-size:12px;font-weight:700;color:#6c9c82;background:#edf8f1;border:1px solid #dcefe4;border-radius:22px;padding:8px 13px}.live i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#57ba80;margin-right:5px}
+.demo{padding:6px 15px;text-align:center;background:#fff5dc;color:#98651a;font-size:10px;font-weight:800;letter-spacing:.7px;border-bottom:1px solid #f2e5c5}
+.ticker{display:flex;gap:7px;overflow:hidden;padding:10px 12px 4px;white-space:nowrap;background:#fff}.coin{flex:none;border:1px solid #e8eaed;background:#fafbfc;border-radius:20px;padding:7px 10px;font-size:12px;font-weight:700}.coin em{font-style:normal;color:var(--green);margin-left:5px}.coin i{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#e8eef8;color:#3f669c;font-size:9px;font-style:normal;margin-right:4px}
+.hero{padding:17px 19px 12px;background:#fff}.eyebrow{font:12px ui-monospace,SFMono-Regular,monospace;color:#90959d;letter-spacing:.2px}.balance-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}.balance{font-size:clamp(48px,12vw,76px);line-height:.98;font-weight:850;letter-spacing:-3px}.cents{color:#c7cbd0}.gain{margin-left:auto;align-self:flex-start;background:#dcf6e9;color:#159764;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:800}.summary{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:12px}.pill{border:1px solid #e5e7ea;background:#fff;border-radius:22px;padding:7px 12px;font-size:13px;font-weight:700}.pill.dark{background:#16181d;color:#fff;border-color:#16181d}.profitline{color:var(--green);font-size:13px;font-weight:750;margin-top:11px}.clock{float:right;color:#17191d;font:700 13px ui-monospace,monospace}
+.chart{background:#fff;padding:8px 18px 12px;border-bottom:1px solid var(--line)}.chart svg{width:100%;height:210px;display:block}.chartfoot{display:flex;justify-content:space-between;color:#858b93;font:11px ui-monospace,monospace;margin-top:0}.legend{display:flex;gap:13px}
+.section{padding:14px 17px 0}.sectitle{display:flex;align-items:center;justify-content:space-between;margin:0 2px 9px}.sectitle b{font-size:18px;letter-spacing:-.4px}.sectitle span{font:11px ui-monospace,monospace;color:#57a984}
+.card{background:var(--card);border:1px solid #e8eaed;border-radius:18px;box-shadow:0 2px 8px #1c25300a;overflow:hidden}
+.whale{padding:13px 14px}.rowtitle{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.rowtitle strong{font-size:15px}.rowtitle small{color:#7391bb;font:11px ui-monospace,monospace}.move{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:6px 0;font:12px ui-monospace,monospace;color:#626973}.move b{color:#20242a;font-weight:700}.buy{color:#219b6d;font-weight:800}.wallet{color:#90959c}.amount{color:#737a84;text-align:right}
+.narrative{padding:13px 14px}.heat{display:grid;grid-template-columns:1fr 1.2fr 24px 45px;align-items:center;gap:8px;margin:10px 0;font-size:13px}.heatlabel{font-weight:650}.bar{height:9px;border-radius:20px;background:#f0f1f2;overflow:hidden}.bar i{display:block;height:100%;border-radius:20px;background:linear-gradient(90deg,#f4a23d,#e98222)}.score{font-weight:800;text-align:right}.icons{font-size:14px}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:13px 17px 0}.tile{background:#fff;border:1px solid #e8eaed;border-radius:17px;padding:12px 11px;min-width:0;box-shadow:0 2px 8px #1c253008}.tilehead{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;min-height:28px}.tileicon{width:21px;height:21px;border-radius:7px;display:grid;place-items:center;background:#eef3fb;color:#4c83c7}.tileval{font-size:27px;font-weight:850;letter-spacing:-1px;margin-top:11px;white-space:nowrap}.tile small{display:block;font-size:10px;color:#8a9098;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.spark{width:100%;height:19px;margin-top:6px}
+.decisions{padding:13px 14px;background:linear-gradient(140deg,#e9f8ef,#f4fbf6);border-color:#d8efdf}.decision-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.decision-head strong{font-size:16px}.decision-head span{font:11px ui-monospace,monospace;color:#269d6b}.decision{display:grid;grid-template-columns:42px 45px 1fr auto;gap:7px;align-items:center;padding:7px 0;border-bottom:1px solid #dcefe2;font:12px ui-monospace,monospace}.decision:last-child{border:0}.time{color:#89938e}.action.buy{color:#3c77ad}.action.sell{color:#269b6d}.decision b{font-weight:750}.pnl{color:#229a6b;font-weight:800}.muted{color:#9aa19c}
+.footer-note{margin:13px 17px 0;padding:10px 12px;background:#fff8e9;border:1px solid #f2e7ca;border-radius:12px;color:#80662c;font-size:10px;line-height:1.45}
+@media(max-width:380px){header{padding:0 12px}.brandname{font-size:18px}.agents-count{font-size:10px}.tiles{gap:6px;padding-left:12px;padding-right:12px}.tile{padding:10px 8px}.tilehead{font-size:10px}.tileval{font-size:23px}.section{padding-left:12px;padding-right:12px}.balance{font-size:51px}}
+</style>
+</head>
 <body>
-<header><div class="brand"><div class="mark">🦁👑</div><div><strong>DioMasteR2D</strong><small>GROK BOT • SOLANA DESK</small></div></div><div class="status">PAPER MODE</div></header>
-<div class="ticker"><div class="chip"><i class="dot"></i>SOLANA · FEED OFF</div><div class="chip"><i class="dot"></i>PUMP.FUN · WAITING</div><div class="chip"><i class="dot"></i>GMGN · NOT CONNECTED</div></div>
-<section class="hero"><div class="eyebrow">Paper portfolio · starting balance</div><div class="balance" id="balance">$95.00</div><div class="subline"><span class="pill">+$0.00 · 0.00%</span><span>Session P/L · no trades yet</span></div></section>
-<section class="chartbox"><div class="charthead"><b>Portfolio performance</b><span>SESSION · PAPER</span></div>
-<svg viewBox="0 0 340 126" preserveAspectRatio="none" role="img" aria-label="Flat portfolio chart; no paper trades yet"><defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#32d99a" stop-opacity=".22"/><stop offset="1" stop-color="#32d99a" stop-opacity="0"/></linearGradient></defs><path d="M0 100 H340 M0 62 H340 M0 24 H340" stroke="#243236" stroke-width="1" stroke-dasharray="3 5" fill="none"/><path d="M2 92 L338 92 L338 120 L2 120Z" fill="url(#fill)"/><path d="M2 92 L338 92" stroke="#36d99a" stroke-width="2" fill="none"/><circle cx="338" cy="92" r="3.5" fill="#36d99a"/></svg><div class="chartfoot"><span>START</span><span>NO EXECUTED PAPER TRADES</span><span>NOW</span></div></section>
-<section class="metrics"><div class="metric"><label>TRADES</label><b>0</b><small>session</small></div><div class="metric"><label>MEMECOINS</label><b>0</b><small>tracked</small></div><div class="metric"><label>OPEN POSITIONS</label><b>0 / 10</b><small>paper limit</small></div></section>
-<section class="section"><div class="sectitle"><b>5 REPOSITORIES</b><span>PINNED · NOT RUNNING</span></div><div class="panel">
-<div class="repo"><div class="repoicon">◈</div><div class="repoinfo"><b>GMGNAI / gmgn-skills</b><small>Token · holders · smart money research</small></div><span class="state">PINNED</span></div>
-<div class="repo"><div class="repoicon">◎</div><div class="repoinfo"><b>chainstacklabs / pumpfun-bonkfun-bot</b><small>Pump.fun event and curve research</small></div><span class="state">PINNED</span></div>
-<div class="repo"><div class="repoicon">ϟ</div><div class="repoinfo"><b>0xfnzero / sol-trade-sdk</b><small>Solana DEX SDK · execution research</small></div><span class="state">PINNED</span></div>
-<div class="repo"><div class="repoicon">✳</div><div class="repoinfo"><b>elizaos / eliza</b><small>Agent runtime and plugin framework</small></div><span class="state">PINNED</span></div>
-<div class="repo"><div class="repoicon">◉</div><div class="repoinfo"><b>TraderAlice / OpenAlice</b><small>Research workspace and orchestration</small></div><span class="state">PINNED</span></div>
-</div></section>
-<section class="section"><div class="sectitle"><b>AI AGENT TEAM</b><span>10 SEATS · STANDBY</span></div><div class="agentgrid">
-<div class="agent"><b>CHIEF</b><small>idle</small></div><div class="agent"><b>SCOUT</b><small>idle</small></div><div class="agent"><b>RISK</b><small>veto ready</small></div><div class="agent"><b>WHALE</b><small>idle</small></div><div class="agent"><b>SNIPER</b><small>idle</small></div>
-<div class="agent"><b>RUG</b><small>idle</small></div><div class="agent"><b>EXIT</b><small>idle</small></div><div class="agent"><b>SHILL</b><small>idle</small></div><div class="agent"><b>SIGNAL</b><small>idle</small></div><div class="agent"><b>JOURNAL</b><small>idle</small></div>
-</div></section>
-<section class="section"><div class="sectitle"><b>PAPER CONFIGURATION</b><span>USER SETTINGS</span></div><div class="panel config"><div><small>TRADE SIZE</small><b>$2.00</b></div><div><small>MAX POSITIONS</small><b>10</b></div><div><small>TAKE PROFIT</small><b>+10%</b></div><div><small>STOP LOSS</small><b>-5%</b></div><div><small>DAILY LOSS CAP</small><b>$15</b></div><div><small>MODE</small><b>PAPER</b></div></div></section>
-<section class="section"><div class="sectitle"><b>GROK BOT DECISIONS</b><span>LIVE LOG · EMPTY</span></div><div class="panel log"><div class="logrow"><i class="logdot"></i><div><b>Desk initialized in safe mode</b><small>No market feed or agent run is connected to this screen yet.</small></div></div><div class="logrow"><i class="logdot"></i><div><b>Risk guard active</b><small>Real transaction signing and broadcast are not available from this Android app.</small></div></div><div class="logrow"><i class="logdot"></i><div><b>Waiting for verified data sources</b><small>Signals and P/L will appear only after they are returned by the connected backend.</small></div></div></div></section>
-<section class="section"><div class="sectitle"><b>24H RECAP</b><span>VERIFIED PAPER LEDGER</span></div><div class="panel recap"><div class="recaptop"><b>Session summary</b><span class="state">NO DATA YET</span></div><div class="recapgrid"><div><small>START</small><b>$95.00</b></div><div><small>NET WORTH</small><b id="networth">$95.00</b></div><div><small>WIN RATE</small><b>—</b></div></div></div></section>
-<div class="actions"><button class="btn" id="refresh">REFRESH STATUS</button><button class="btn secondary" id="copy">COPY DIAGNOSTICS</button></div>
-<div class="notice"><strong>HONEST DATA MODE:</strong> Η οθόνη είναι το Android dashboard shell. Τα 5 projects έχουν καρφιτσωθεί στο Git ως submodules, αλλά δεν έχουν ακόμη εγκατασταθεί/εκκινηθεί ως υπηρεσίες. Δεν εμφανίζουμε ψεύτικα live σήματα, trades ή κέρδη. Οι πραγματικές συναλλαγές παραμένουν απενεργοποιημένες.</div>
-<footer>DioMasteR2D GROK BOT · SOLANA · PAPER FIRST</footer>
-<script>
-const refresh=document.getElementById('refresh');
-refresh.addEventListener('click',()=>{refresh.textContent='STATUS CHECKED · '+new Date().toLocaleTimeString('el-GR');});
-document.getElementById('copy').addEventListener('click',async()=>{const s='DioMasteR2D Grok Bot\nMode: PAPER\nBalance: $95.00\nTrades: 0\nOpen positions: 0/10\nRepositories: 5 pinned, not running\nBackend: not connected';try{await navigator.clipboard.writeText(s);document.getElementById('copy').textContent='COPIED';}catch(e){document.getElementById('copy').textContent='COPY UNAVAILABLE';}});
-</script></body></html>
+<header><div class="brand"><div class="logo">G</div><div><span class="brandname">Grok Bot</span><span class="agents-count">5 agents</span></div></div><div class="live"><i></i>Demo</div></header>
+<div class="demo">DEMO PREVIEW · SAMPLE VALUES FROM THE REFERENCE VIDEO · NOT LIVE TRADING</div>
+<div class="ticker">
+ <div class="coin"><i>◉</i>$XDG <em>+838%</em></div><div class="coin"><i>🐸</i>$SAFU <em>+244%</em></div><div class="coin"><i>◎</i>$FLOAT <em>+169%</em></div><div class="coin"><i>GM</i>$GANG <em>+56%</em></div><div class="coin"><i>♜</i>$FIST <em>+31%</em></div>
+</div>
+<section class="hero">
+ <div class="eyebrow">day session · 5 agents hunting memes · demo</div>
+ <div class="balance-row"><div class="balance">$145<span class="cents">.99</span></div><div class="gain">+$11</div></div>
+ <div class="summary"><span class="pill">in $54 · 30 trades</span><span class="pill dark">2.70×</span></div>
+ <div class="profitline">+$83.99 · 5 agents online <span class="clock">13:52</span></div>
+</section>
+<section class="chart">
+ <svg viewBox="0 0 340 190" preserveAspectRatio="none" aria-label="Demo portfolio performance chart">
+ <defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#27b879" stop-opacity=".23"/><stop offset="1" stop-color="#27b879" stop-opacity="0"/></linearGradient></defs>
+ <path d="M0 160H340 M0 105H340 M0 50H340" stroke="#edf0f1" stroke-width="1"/>
+ <path d="M2 160 C28 155 37 145 55 138 S88 124 105 110 S138 93 154 78 S185 64 205 46 S220 30 230 17 L230 175 L2 175Z" fill="url(#area)"/>
+ <path d="M2 160 C28 155 37 145 55 138 S88 124 105 110 S138 93 154 78 S185 64 205 46 S220 30 230 17" stroke="#20a96f" stroke-width="3" fill="none" stroke-linecap="round"/>
+ <circle cx="230" cy="17" r="5" fill="#fff" stroke="#17191d" stroke-width="2.5"/>
+ <path d="M230 17V175" stroke="#d9e5df" stroke-dasharray="3 4"/>
+ </svg>
+ <div class="chartfoot"><span>12:00</span><span class="legend"><span>━ value</span><span>┄ put in</span></span></div>
+</section>
+<section class="section"><div class="sectitle"><b>5 agents hunting</b><span>demo · grok core</span></div>
+ <div class="card whale">
+  <div class="rowtitle"><strong>🐋 Whale tracker · Arkham</strong><small>• 44 moves</small></div>
+  <div class="move"><span><b>9Bz...Lm4</b></span><span class="buy">bought 🟢 $SAFU</span><span class="amount">$1.5M · dormant 2y</span></div>
+  <div class="move"><span><b>6tN...aW7</b></span><span class="buy">bought 🟠 $OMBRO</span><span class="amount">$0.8M · smart money</span></div>
+  <div class="move"><span><b>Hb2...k9M</b></span><span class="buy">bought 🟡 $CAPY</span><span class="amount">$2.6M · dormant 2y</span></div>
+ </div>
+</section>
+<section class="section"><div class="card narrative">
+ <div class="rowtitle"><strong>🟠 Narrative scout · what's hot</strong><small style="color:#bd8a44">• heat map</small></div>
+ <div class="heat"><span class="heatlabel">🤖 AI agents</span><span class="bar"><i style="width:94%"></i></span><b class="score">94</b><span class="icons">◎ 🟠</span></div>
+ <div class="heat"><span class="heatlabel">🐱 cats</span><span class="bar"><i style="width:93%"></i></span><b class="score">93</b><span class="icons">🟡 🐸</span></div>
+ <div class="heat"><span class="heatlabel">🔥 culture coins</span><span class="bar"><i style="width:83%"></i></span><b class="score">83</b><span class="icons">GM 🐸</span></div>
+ </div></section>
+<div class="tiles">
+ <div class="tile"><div class="tilehead"><span class="tileicon">𝕏</span>Meme radar · X</div><div class="tileval">2.1K/h</div><small>$OMBRO mentions</small><svg class="spark" viewBox="0 0 100 20"><path d="M0 14L8 11L16 15L24 8L32 12L40 7L48 12L56 9L64 13L72 6L80 11L88 8L100 10" fill="none" stroke="#9c7bb8" stroke-width="1.8"/></svg></div>
+ <div class="tile"><div class="tilehead"><span class="tileicon" style="color:#cf7474">D</span>Dev checker</div><div class="tileval">129</div><small>devs flagged · 18 clean</small><svg class="spark" viewBox="0 0 100 20"><path d="M0 8L8 12L16 9L24 14L32 8L40 11L48 7L56 13L64 10L72 14L80 9L88 12L100 8" fill="none" stroke="#d38a8a" stroke-width="1.8"/></svg></div>
+ <div class="tile"><div class="tilehead"><span class="tileicon" style="color:#38aab0">H</span>Holder hunter</div><div class="tileval">+17%</div><small>holders/h · top pick</small><svg class="spark" viewBox="0 0 100 20"><path d="M0 14L8 12L16 14L24 7L32 12L40 8L48 11L56 5L64 9L72 7L80 11L88 5L100 8" fill="none" stroke="#69b7ba" stroke-width="1.8"/></svg></div>
+</div>
+<section class="section"><div class="card decisions">
+ <div class="decision-head"><strong><span style="display:inline-grid;place-items:center;width:25px;height:25px;background:#15191c;color:white;border-radius:8px;margin-right:6px">G</span>Grok core · decisions</strong><span>● DEMO</span></div>
+ <div class="decision"><span class="time">13:43</span><span class="action buy">BUY</span><b>🟡 $CAPY · narrative + holders</b><span class="muted">demo</span></div>
+ <div class="decision"><span class="time">13:43</span><span class="action sell">SELL</span><b>🐸 $SAFU</b><span class="pnl">+$2.38</span></div>
+ <div class="decision"><span class="time">13:44</span><span class="action sell">SELL</span><b>🟡 $FIST</b><span class="pnl">+$11.36</span></div>
+ <div class="decision"><span class="time">13:44</span><span class="action sell">SELL</span><b>🟠 $OMBRO</b><span class="pnl">+$13.36</span></div>
+ <div class="decision"><span class="time">13:46</span><span class="action buy">BUY</span><b>🐸 $SAFU · new signal</b><span class="muted">demo</span></div>
+ </div></section>
+<div class="footer-note">DEMO PREVIEW: Τα νούμερα και τα trades είναι δείγματα για να αντιγράψουν τη διάταξη του βίντεο. Δεν είναι live τιμές, πραγματικά wallets ή εκτελεσμένες συναλλαγές. Η σύνδεση των agents και των market feeds θα προστεθεί ξεχωριστά.</div>
+</body></html>
