@@ -1,6 +1,8 @@
 package com.diomaster2d.grokbot
 
 import android.os.Bundle
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import androidx.compose.ui.unit.dp
@@ -145,7 +148,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
  var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
  var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketMessage by remember { mutableStateOf("Waiting for live multi-source market feed") }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
- var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
+ var selectedCoin by remember { mutableStateOf<JSONObject?>(null) }; var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
  LaunchedEffect(Unit) {
@@ -308,7 +311,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       val change=coin.optDouble("price_change_1h_pct",Double.NaN)
       val agents=coin.optJSONArray("agents")
       val decisionLine=if(agents==null) "Agent assessment unavailable" else (0 until agents.length()).mapNotNull { agents.optJSONObject(it) }.joinToString("  ·  ") { it.optString("agent")+": "+it.optString("decision") }
-      CardBox { Column(Modifier.fillMaxWidth().clickable { marketQuery=coin.optString("mint",""); tab=5 },verticalArrangement=Arrangement.spacedBy(6.dp)) {
+      CardBox { Column(Modifier.fillMaxWidth().clickable { selectedCoin=coin; marketQuery=coin.optString("mint",""); tab=5 },verticalArrangement=Arrangement.spacedBy(6.dp)) {
        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
          Text(coin.optString("symbol","—")+" · "+coin.optString("name","Unknown"),fontWeight=FontWeight.Bold,color=Color.White)
@@ -521,6 +524,45 @@ class DeskClient(private val base:String,private val seat:String,private val tok
        activity=(listOf("MARKET SCAN · $count candidates") + activity).take(30)
       }},enabled=!busy&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text(if(busy)"SCANNING..." else "SCAN MARKET NOW")}
      } } }
+     selectedCoin?.let { coin ->
+      val mint=coin.optString("mint","")
+      val price=coin.optDouble("price_usd",Double.NaN)
+      val change=coin.optDouble("price_change_24h_pct",Double.NaN)
+      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
+       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+         Text(coin.optString("symbol","—")+" · "+coin.optString("name","Unknown"),fontSize=18.sp,fontWeight=FontWeight.Bold)
+         Text("SOLANA · LIVE MARKET CHART",fontSize=9.sp,color=Blue)
+        }
+        TextButton(onClick={selectedCoin=null}) { Text("CLOSE") }
+       }
+       Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+        Metric("PRICE",if(price.isFinite()) "$"+String.format(java.util.Locale.US,"%.10f",price) else "N/A",Blue)
+        Metric("24H CHANGE",if(change.isFinite()) String.format(java.util.Locale.US,"%+.2f%%",change) else "N/A",if(change.isFinite()&&change>=0) Green else Red)
+        Metric("LIQUIDITY",coin.optDouble("liquidity_usd",Double.NaN).let { if(it.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",it) else "N/A" },Color.White)
+       }
+       Text("PRICE CHART · DEXSCREENER",fontSize=11.sp,color=Blue,fontWeight=FontWeight.Bold)
+       if(mint.isNotBlank()) {
+        AndroidView(
+         modifier=Modifier.fillMaxWidth().height(390.dp),
+         factory={ context ->
+          WebView(context).apply {
+           settings.javaScriptEnabled=true
+           settings.domStorageEnabled=true
+           settings.loadsImagesAutomatically=true
+           webViewClient=WebViewClient()
+           loadUrl("https://dexscreener.com/solana/"+mint+"?embed=1&theme=dark&trades=0&info=0")
+          }
+         },
+         update={ view ->
+          val target="https://dexscreener.com/solana/"+mint+"?embed=1&theme=dark&trades=0&info=0"
+          if(view.tag!=target) { view.tag=target; view.loadUrl(target) }
+         }
+        )
+       } else Text("Chart unavailable: token mint missing.",fontSize=11.sp,color=Muted)
+       Text("Read-only market view · no buy/sell actions.",fontSize=10.sp,color=Muted)
+      } } }
+     }
      val candidates=marketData?.optJSONArray("candidates")
      val candidateRows=if(candidates==null) emptyList() else (0 until candidates.length()).mapNotNull { candidates.optJSONObject(it) }
      if(candidateRows.isEmpty()) item { CardBox { Text("Δεν βρέθηκαν coins. Κάνε αναζήτηση ή πάτησε LATEST COINS.",fontSize=12.sp,color=Muted) } }
@@ -531,7 +573,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       val mint=coin.optString("mint")
       val liq=coin.optDouble("liquidity_usd",Double.NaN)
       val price=coin.optDouble("price_usd",Double.NaN)
-      CardBox { Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+      CardBox { Column(Modifier.fillMaxWidth().clickable { selectedCoin=coin },verticalArrangement=Arrangement.spacedBy(6.dp)) {
        Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(10.dp)) {
   CoinPulseBadge(coin.optString("symbol", "SOL"))
   Column(Modifier.weight(1f)) {
