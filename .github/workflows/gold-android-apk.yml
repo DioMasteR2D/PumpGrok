@@ -1,4 +1,4 @@
-name: Build DioMasteR GOLD AI APK
+name: Build DioMasteR2D WHALE APK
 
 on:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DioMasteR-GOLD-AI-debug-apk
+          name: DioMasteR2D-WHALE-debug-apk
           path: gold-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
