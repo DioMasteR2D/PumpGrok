@@ -177,6 +177,8 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
                     row["market_cap_usd"] = row["market_cap_usd"] or _number(pair.get("marketCap") or pair.get("fdv"))
                     row["name"] = pair.get("baseToken", {}).get("name") or row["name"]
                     row["symbol"] = pair.get("baseToken", {}).get("symbol") or row["symbol"]
+                    if not row.get("pool") and pair.get("pairAddress"):
+                        row["pool"] = "solana_" + str(pair["pairAddress"])
                     row["url"] = row["url"] or pair.get("url")
                     if "DexScreener" not in row["source"]:
                         row["source"].append("DexScreener")
@@ -405,6 +407,8 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
                     row["price_change_24h_pct"] = _number((pair.get("priceChange") or {}).get("h24")) if (pair.get("priceChange") or {}).get("h24") is not None else row.get("price_change_24h_pct")
                     row["name"] = pair.get("baseToken", {}).get("name") or row["name"]
                     row["symbol"] = pair.get("baseToken", {}).get("symbol") or row["symbol"]
+                    if not row.get("pool") and pair.get("pairAddress"):
+                        row["pool"] = "solana_" + str(pair["pairAddress"])
                     row["url"] = pair.get("url") or row.get("url")
                     if "DexScreener" not in row["source"]:
                         row["source"].append("DexScreener")
