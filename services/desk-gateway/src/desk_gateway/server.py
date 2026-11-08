@@ -38,7 +38,7 @@ import httpx
 from pydantic import ValidationError
 
 from desk_gateway.config import GatewayConfig
-from desk_gateway.market_scanner import market_home, scan_market, search_market
+from desk_gateway.market_scanner import market_chart, market_home, scan_market, search_market
 from desk_gateway.market_stream import run_pumpportal_stream
 from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import (
@@ -332,6 +332,29 @@ class _Handler(BaseHTTPRequestHandler):
         state = self.server.gateway_state  # type: ignore[attr-defined]
         if path == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
+            return
+        if path == "/market/chart":
+            presented = _presented_token(self.headers)
+            allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
+            if not presented or not any(token and hmac.compare_digest(presented.encode(), token.encode()) for token in allowed):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief or scout token required"}})
+                return
+            try:
+                from urllib.parse import parse_qs, urlsplit
+                query = parse_qs(urlsplit(self.path).query)
+                pool = query.get("pool", [""])[0]
+                timeframe = query.get("timeframe", ["minute"])[0]
+                aggregate = int(query.get("aggregate", ["5"])[0])
+                limit = int(query.get("limit", ["100"])[0])
+                self._send_json(200, market_chart(pool, timeframe, aggregate, limit))
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+            except httpx.HTTPError:
+                log.exception("market chart provider failed")
+                self._send_json(502, {"error": "Market chart provider unavailable"})
+            except Exception:
+                log.exception("market chart request failed")
+                self._send_json(502, {"error": "Market chart unavailable"})
             return
         if path == "/market/home":
             presented = _presented_token(self.headers)
