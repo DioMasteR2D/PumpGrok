@@ -226,44 +226,42 @@ def scan_market_async(limit: int = 40) -> dict[str, Any]:
 
 
 def search_market(query: str, limit: int = 20) -> dict[str, Any]:
-    """Search public Solana DEX pairs by token name, symbol or mint; never places orders."""
+    """Search DexScreener Solana pairs; omit rows without real price and liquidity."""
     term = query.strip()
-    if not term or len(term) > 100:
-        raise ValueError("query must contain 1-100 characters")
-    if not 1 <= limit <= 20:
-        raise ValueError("limit must be between 1 and 20")
+    if not term or len(term) > 100: raise ValueError("query must contain 1-100 characters")
+    if not 1 <= limit <= 20: raise ValueError("limit must be between 1 and 20")
     started = time.time()
-    response = httpx.get("https://api.dexscreener.com/latest/dex/search", params={"q": term}, timeout=12.0)
+    response = httpx.get("https://api.dexscreener.com/latest/dex/search", params={"q": term}, timeout=httpx.Timeout(12.0, connect=4.0), headers={"Accept": "application/json"})
     response.raise_for_status()
     payload = response.json()
-    rows: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    grouped: dict[str, list[dict[str, Any]]] = {}
     for pair in payload.get("pairs") or []:
-        if pair.get("chainId") != SOLANA:
-            continue
+        if not isinstance(pair, dict) or pair.get("chainId") != SOLANA: continue
+        mint = str(((pair.get("baseToken") or {}).get("address")) or "").strip()
+        if mint and pair.get("pairAddress"): grouped.setdefault(mint, []).append(pair)
+    rows: list[dict[str, Any]] = []
+    for mint, pairs in grouped.items():
+        valid = [p for p in pairs if (_number(p.get("priceUsd")) or 0) > 0 and (_number((p.get("liquidity") or {}).get("usd")) or 0) > 0]
+        if not valid: continue
+        pair = max(valid, key=lambda p: _number((p.get("liquidity") or {}).get("usd")) or 0)
         token = pair.get("baseToken") or {}
-        mint = str(token.get("address") or "")
-        if not mint or mint in seen:
-            continue
-        seen.add(mint)
         liquidity = _number((pair.get("liquidity") or {}).get("usd"))
         volume = _number((pair.get("volume") or {}).get("h24"))
-        market_cap = _number(pair.get("marketCap") or pair.get("fdv"))
+        cap = _number(pair.get("marketCap") or pair.get("fdv"))
         rows.append({
-            "mint": mint, "name": token.get("name") or "Unknown",
-            "symbol": token.get("symbol") or "—", "pool": pair.get("pairAddress"),
-            "price_usd": _number(pair.get("priceUsd")), "liquidity_usd": liquidity,
-            "volume_24h_usd": volume, "market_cap_usd": market_cap,
-            "source": ["DexScreener Search"], "url": pair.get("url"),
+            "mint": mint, "name": token.get("name") or "Unknown", "symbol": token.get("symbol") or "—",
+            "pool": "solana_" + str(pair["pairAddress"]), "price_usd": _number(pair.get("priceUsd")),
+            "liquidity_usd": liquidity, "volume_24h_usd": volume, "market_cap_usd": cap,
+            "price_change_1h_pct": _number((pair.get("priceChange") or {}).get("h1")),
+            "price_change_24h_pct": _number((pair.get("priceChange") or {}).get("h24")),
+            "source": ["DexScreener"], "url": pair.get("url"),
             "onchain": {"verified": False, "mint_authority_revoked": None, "freeze_authority_revoked": None, "top10_share": None, "reason": "Run scanner safety verification before considering entry"},
-            "checks": {"liquidity": liquidity is not None and liquidity >= MIN_LIQUIDITY_USD, "mint_authority": False, "freeze_authority": False, "whale_concentration": False},
+            "checks": {"liquidity": liquidity >= MIN_LIQUIDITY_USD, "mint_authority": False, "freeze_authority": False, "whale_concentration": False},
             "ai_score": None, "entry_status": "SEARCH_RESULT_UNVERIFIED", "paper_entry_enabled": False,
             "blockers": ["Search result only", "On-chain safety verification not run", "AI score provider not configured", "paper order approval pipeline not connected"],
         })
-        if len(rows) >= limit:
-            break
-    return {"mode": "paper_only", "scanner": "read_only_search", "query": term, "generated_at": int(time.time()), "elapsed_ms": int((time.time() - started) * 1000), "candidate_count": len(rows), "candidates": rows, "errors": [], "policy": {"minimum_liquidity_usd": MIN_LIQUIDITY_USD, "maximum_top10_concentration": MAX_TOP10_SHARE}}
-
+        if len(rows) >= limit: break
+    return {"mode": "paper_only", "scanner": "dexscreener_only_search", "query": term, "generated_at": int(time.time()), "elapsed_ms": int((time.time() - started) * 1000), "candidate_count": len(rows), "candidates": rows, "errors": [], "policy": {"minimum_liquidity_usd": MIN_LIQUIDITY_USD, "maximum_top10_concentration": MAX_TOP10_SHARE}}
 
 # Shared market-home snapshot cache: the Android home and Market tab reuse one
 # provider snapshot instead of multiplying upstream requests during navigation.
