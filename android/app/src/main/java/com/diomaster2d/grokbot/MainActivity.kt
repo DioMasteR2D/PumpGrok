@@ -240,16 +240,21 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  }
  LaunchedEffect(client, selectedCoin) {
   val activeClient=client ?: return@LaunchedEffect
-  val coin=selectedCoin ?: run { chartData=null; chartMessage="Επιλογή token για φόρτωση γραφήματος"; return@LaunchedEffect }
+  val coin=selectedCoin
+  if(coin==null) {
+   chartData=null
+   chartMessage="Επιλογή token για φόρτωση γραφήματος"
+   return@LaunchedEffect
+  }
   val pool=coin.optString("pool","").substringAfter("_",coin.optString("pool","")).trim()
-  if(pool.isBlank()) { chartData=null; chartMessage="Δεν βρέθηκε DEX pool για αυτό το token · γράφημα μη διαθέσιμο"; return@LaunchedEffect }
-  chartMessage="Φόρτωση πραγματικών κεριών OHLCV…"
-  try {
-   val result=activeClient.marketChart(pool)
-   val candles=result.optJSONArray("candles")
-   if(candles==null || candles.length()<2) { chartData=null; chartMessage="Ο πάροχος δεν επέστρεψε ακόμη ιστορικά κεριά για αυτό το pool" }
-   else { chartData=result; chartMessage="GECKOTERMINAL · \u0024{candles.length()} REAL OHLCV CANDLES · USD" }
-  } catch(e:Exception) { chartData=null; chartMessage="Γράφημα προσωρινά μη διαθέσιμο · \u0024{e.message ?: "provider error"}" }
+  if(pool.isBlank()) {
+   chartData=null
+   chartMessage="Δεν βρέθηκε DexScreener pair για αυτό το token"
+   return@LaunchedEffect
+  }
+  // The visible chart is DexScreener's official pair embed; no GeckoTerminal OHLCV call.
+  chartData=null
+  chartMessage="DEXSCREENER LIVE PAIR CHART"
  }
  LaunchedEffect(client, tab, marketQuery) {
   val activeClient = client ?: return@LaunchedEffect
