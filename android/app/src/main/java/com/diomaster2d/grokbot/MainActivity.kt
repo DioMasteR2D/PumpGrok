@@ -156,7 +156,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var equity by remember { mutableStateOf("--") }; var pnl by remember { mutableStateOf("--") }; var cash by remember { mutableStateOf("--") }
  var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
  var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
- var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketMessage by remember { mutableStateOf("Waiting for live multi-source market feed") }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
+ var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketMessage by remember { mutableStateOf("Waiting for DexScreener live market feed") }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
  var chartData by remember { mutableStateOf<JSONObject?>(null) }; var chartMessage by remember { mutableStateOf("Επιλογή token για φόρτωση γραφήματος") }
  var selectedCoin by remember { mutableStateOf<JSONObject?>(null) }; var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var agentAutoRunning by remember { mutableStateOf(false) }; var agentAutoMessage by remember { mutableStateOf("AUTO AGENTS STOPPED") }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
@@ -338,8 +338,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
        val providerLine=(0 until providers.length()).mapNotNull { providers.optJSONObject(it) }.joinToString("  ·  ") { it.optString("name")+" "+it.optString("status") }
        Text(providerLine,fontSize=9.sp,color=Blue)
       }
-      val stream=homeMarketData?.optJSONObject("pumpportal_stream")
-      Text("PUMPPORTAL STREAM · "+(if(stream?.optBoolean("connected")==true) "CONNECTED" else "RECONNECTING / NOT CONNECTED"),fontSize=10.sp,color=if(stream?.optBoolean("connected")==true) Green else Muted)
+      Text("DEXSCREENER LIVE MARKET · "+(if((homeMarketData?.optInt("candidate_count") ?: 0)>0) "CONNECTED" else "WAITING FOR PAIRS"),fontSize=10.sp,color=if((homeMarketData?.optInt("candidate_count") ?: 0)>0) Green else Muted)
       Text("Rule-based agent assessments · unverified tokens remain blocked · no live orders.",fontSize=10.sp,color=Red)
       OutlinedButton(onClick={tab=5},modifier=Modifier.fillMaxWidth()) { Text("OPEN FULL MARKET & SEARCH COINS") }
      } } }
