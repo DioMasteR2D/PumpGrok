@@ -106,7 +106,12 @@ class PumpFunScanner:
                         raise RuntimeError("logsSubscribe_rejected")
                     await self.heartbeat("connected", "logsSubscribe_active")
                     delay = 1.0
-                    async for raw in ws:
+                    while True:
+                        try:
+                            raw = await asyncio.wait_for(ws.recv(), timeout=30.0)
+                        except TimeoutError:
+                            await self.heartbeat("connected", "logsSubscribe_active")
+                            continue
                         try:
                             message = json.loads(raw)
                         except (json.JSONDecodeError, TypeError):
