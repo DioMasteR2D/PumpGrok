@@ -581,7 +581,12 @@ class DeskClient(private val base:String,private val seat:String,private val tok
        Text("PRICE CHART · GECKOTERMINAL LIVE POOL",fontSize=11.sp,color=Blue,fontWeight=FontWeight.Bold)
        val poolRaw=coin.optString("pool","")
        val poolAddress=poolRaw.substringAfter("_",poolRaw).takeIf { it.isNotBlank() }
-       if(!poolAddress.isNullOrBlank()) {
+       val chartUrl=if(!poolAddress.isNullOrBlank()) {
+        "https://www.geckoterminal.com/solana/pools/"+poolAddress+"?embed=1&info=0&swaps=0"
+       } else if(mint.isNotBlank()) {
+        "https://dexscreener.com/solana/"+mint+"?embed=1&theme=dark&trades=0&info=0"
+       } else ""
+       if(chartUrl.isNotBlank()) {
         AndroidView(
          modifier=Modifier.fillMaxWidth().height(390.dp),
          factory={ context ->
@@ -591,17 +596,16 @@ class DeskClient(private val base:String,private val seat:String,private val tok
            settings.loadsImagesAutomatically=true
            settings.mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
            webViewClient=WebViewClient()
-           val target="https://www.geckoterminal.com/solana/pools/"+poolAddress+"?embed=1&info=0&swaps=0"
-           tag=target
-           loadUrl(target)
+           tag=chartUrl
+           loadUrl(chartUrl)
           }
          },
          update={ view ->
-          val target="https://www.geckoterminal.com/solana/pools/"+poolAddress+"?embed=1&info=0&swaps=0"
-          if(view.tag!=target) { view.tag=target; view.loadUrl(target) }
+          if(view.tag!=chartUrl) { view.tag=chartUrl; view.loadUrl(chartUrl) }
          }
         )
-       } else Text("Δεν υπάρχει pool address για πραγματικό γράφημα αυτού του token.",fontSize=11.sp,color=Muted)
+        if(poolAddress.isNullOrBlank()) Text("Προβολή token chart μέσω DexScreener · δεν βρέθηκε pool στο GeckoTerminal.",fontSize=10.sp,color=Muted)
+       } else Text("Δεν υπάρχουν διαθέσιμα στοιχεία για γράφημα.",fontSize=11.sp,color=Muted)
        Text("OHLCV API: /market/chart · GeckoTerminal · USD · read-only",fontSize=10.sp,color=Muted)
       } } }
      }
