@@ -105,7 +105,7 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
     with _SCAN_CACHE_LOCK:
         cached = _SCAN_CACHE.get("value")
         age = time.time() - float(_SCAN_CACHE.get("at", 0.0))
-        if cached is not None and age < _SCAN_CACHE_TTL_S:
+        if cached is not None and _SCAN_CACHE.get("limit") == limit and age < _SCAN_CACHE_TTL_S:
             result = copy.deepcopy(cached)
             result["cache_age_ms"] = int(age * 1000)
             return result
@@ -162,8 +162,9 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             errors.append("DexScreener unavailable")
 
         rows = list(candidates.values())[:max(1, min(limit, 100))]
-        # Use DexScreener pair data as a second source for price/liquidity/volume.
-        for row in rows:
+        # Enrich only the first ten rows to stay within public provider rate limits.
+        # Remaining rows retain discovery values and are not discarded.
+        for row in rows[:10]:
             try:
                 response = _get_with_backoff(client, f"https://api.dexscreener.com/latest/dex/tokens/{row['mint']}", attempts=2)
                 response.raise_for_status()
@@ -215,6 +216,7 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
     }
     with _SCAN_CACHE_LOCK:
         _SCAN_CACHE["at"] = time.time()
+        _SCAN_CACHE["limit"] = limit
         _SCAN_CACHE["value"] = copy.deepcopy(result)
     return result
 
