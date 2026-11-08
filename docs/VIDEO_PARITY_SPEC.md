@@ -13,7 +13,7 @@ This specification records the visible product behaviour from the user-supplied 
 - Token/strategy source activity cards for:
   - chainstacklabs/pumpfun-bonkfun-bot — launch/curve event monitoring and graduation tracking.
   - nirholas/pump-fun-sdk — SDK reference excluded from code reuse until licensing is unambiguous; use official Pump docs/IDL or a clearly licensed alternative.
-  - JanDauel/PumpFun-AI-Dev-Sniper — public feature concepts only; no private code.
+  - 0xNikoDev/PumpFun-AI-Dev-Sniper — public feature concepts only; no private code.
 - Agent analytics panels: LAUNCH, CURVE, HOLDERS, DEV, SOCIAL, SNIPER. Each panel displays current state, observed count/metrics, last update time, source and UNKNOWN/STALE status when data is absent.
 - Core decisions/event stream with UTC time, token mint, action/verdict, evidence summary and paper execution status.
 - Live backend/feed heartbeat, RPC health and last successful refresh.
