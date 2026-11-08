@@ -390,14 +390,27 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
             providers.append({"name": "DexScreener profiles", "status": "UNAVAILABLE"})
             errors.append("DexScreener profiles unavailable")
 
-        # Pair enrichment is bounded to avoid bursty calls and 429s.
-        enrich = list(rows.values())[:10]
-        for row in enrich:
+        # Enrich every row that can appear on the home screen in one bounded
+        # DexScreener batch request (up to 30 mints). This also covers fresh
+        # PumpPortal events, which otherwise dominated the first page with N/A.
+        enrich = list(rows.values())[:30]
+        mint_groups = {row["mint"]: row for row in enrich}
+        if mint_groups:
             try:
-                response = client.get(f"https://api.dexscreener.com/latest/dex/tokens/{row['mint']}")
+                mint_path = ",".join(mint_groups.keys())
+                response = client.get(f"https://api.dexscreener.com/latest/dex/tokens/{mint_path}")
                 response.raise_for_status()
-                pairs = [p for p in response.json().get("pairs", []) if p.get("chainId") == SOLANA]
-                if pairs:
+                pairs_by_mint: dict[str, list[dict[str, Any]]] = {}
+                for pair in response.json().get("pairs", []) or []:
+                    if pair.get("chainId") != SOLANA:
+                        continue
+                    base_mint = str((pair.get("baseToken") or {}).get("address") or "")
+                    if base_mint in mint_groups:
+                        pairs_by_mint.setdefault(base_mint, []).append(pair)
+                for mint, row in mint_groups.items():
+                    pairs = pairs_by_mint.get(mint, [])
+                    if not pairs:
+                        continue
                     pair = max(pairs, key=lambda p: _number((p.get("liquidity") or {}).get("usd")) or 0)
                     row["price_usd"] = _number(pair.get("priceUsd")) or row.get("price_usd")
                     row["liquidity_usd"] = _number((pair.get("liquidity") or {}).get("usd")) or row.get("liquidity_usd")
@@ -412,8 +425,13 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
                     row["url"] = pair.get("url") or row.get("url")
                     if "DexScreener" not in row["source"]:
                         row["source"].append("DexScreener")
+                providers.append({"name": "DexScreener pair batch", "status": "OK", "requested": len(mint_groups), "matched": len(pairs_by_mint)})
             except (httpx.HTTPError, ValueError, TypeError):
-                row["price_enrichment"] = "unavailable"
+                log.exception("DexScreener batch enrichment failed")
+                providers.append({"name": "DexScreener pair batch", "status": "UNAVAILABLE"})
+                errors.append("DexScreener pair enrichment unavailable")
+                for row in enrich:
+                    row["price_enrichment"] = "unavailable"
 
         # Jupiter is a price cross-check. Missing quotes stay null, never zero.
         mints = list(rows.keys())[:30]
