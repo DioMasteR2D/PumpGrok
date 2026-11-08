@@ -100,7 +100,7 @@ def _verify_mint(client: httpx.Client, rpc_url: str, mint: str) -> dict[str, Any
 
 
 def scan_market(limit: int = 40) -> dict[str, Any]:
-    """Fetch discovery candidates and enrich with confirmed RPC safety facts."""
+    """DexScreener-only Solana pair scanner with separate on-chain safety checks."""
     started = time.time()
     with _SCAN_CACHE_LOCK:
         cached = _SCAN_CACHE.get("value")
@@ -110,88 +110,87 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             result["cache_age_ms"] = int(age * 1000)
             return result
     rpc_url = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip()
-    timeout = httpx.Timeout(12.0, connect=5.0)
     candidates: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
-    with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}) as client:
-        try:
-            response = _get_with_backoff(client, GECKO_NEW_POOLS, params={"page": 1})
-            response.raise_for_status()
-            payload = response.json()
-            included = {item.get("id"): item for item in payload.get("included", []) if isinstance(item, dict)}
-            for pool in payload.get("data", []):
-                attrs = pool.get("attributes") or {}
-                rel = pool.get("relationships") or {}
-                base_id = (((rel.get("base_token") or {}).get("data") or {}).get("id"))
-                token = included.get(base_id, {}).get("attributes", {})
-                mint = str(token.get("address") or (base_id or "").split("_")[-1])
-                if not mint:
-                    continue
-                candidates[mint] = {
-                    "mint": mint, "name": token.get("name") or attrs.get("name") or "Unknown",
-                    "symbol": token.get("symbol") or "—", "pool": pool.get("id"),
-                    "price_usd": _number(attrs.get("base_token_price_usd")),
-                    "liquidity_usd": _number(attrs.get("reserve_in_usd")),
-                    "volume_24h_usd": _number((attrs.get("volume_usd") or {}).get("h24")),
-                    "market_cap_usd": _number(attrs.get("market_cap_usd") or attrs.get("fdv_usd")),
-                    "source": ["GeckoTerminal"], "url": None,
-                }
-        except (httpx.HTTPError, ValueError, KeyError, TypeError):
-            log.exception("GeckoTerminal discovery failed")
-            errors.append("GeckoTerminal unavailable")
-        try:
-            response = _get_with_backoff(client, DEX_PROFILES)
-            response.raise_for_status()
-            profiles = response.json()
-            for profile in profiles if isinstance(profiles, list) else []:
-                if profile.get("chainId") != SOLANA:
-                    continue
-                mint = str(profile.get("tokenAddress") or "")
-                if not mint:
-                    continue
-                row = candidates.setdefault(mint, {
-                    "mint": mint, "name": profile.get("description") or profile.get("header") or "New Solana token",
-                    "symbol": "—", "pool": None, "price_usd": None, "liquidity_usd": None,
-                    "volume_24h_usd": None, "market_cap_usd": None, "source": [], "url": profile.get("url"),
-                })
-                if "DexScreener" not in row["source"]:
-                    row["source"].append("DexScreener")
-                row["url"] = row["url"] or profile.get("url")
-        except (httpx.HTTPError, ValueError, TypeError):
-            log.exception("DexScreener discovery failed")
-            errors.append("DexScreener unavailable")
-
-        rows = list(candidates.values())[:max(1, min(limit, 100))]
-        # Enrich only the first ten rows to stay within public provider rate limits.
-        # Remaining rows retain discovery values and are not discarded.
-        for row in rows[:10]:
+    providers: dict[str, str] = {}
+    with httpx.Client(timeout=httpx.Timeout(10.0, connect=4.0), headers={"Accept": "application/json"}) as client:
+        for endpoint in (DEX_PROFILES, "https://api.dexscreener.com/token-boosts/latest/v1"):
             try:
-                response = _get_with_backoff(client, f"https://api.dexscreener.com/latest/dex/tokens/{row['mint']}", attempts=2)
-                response.raise_for_status()
-                pairs = [p for p in response.json().get("pairs", []) if p.get("chainId") == SOLANA]
-                if pairs:
-                    pair = max(pairs, key=lambda p: _number((p.get("liquidity") or {}).get("usd")) or 0)
-                    row["price_usd"] = row["price_usd"] or _number(pair.get("priceUsd"))
-                    row["liquidity_usd"] = row["liquidity_usd"] or _number((pair.get("liquidity") or {}).get("usd"))
-                    row["volume_24h_usd"] = row["volume_24h_usd"] or _number((pair.get("volume") or {}).get("h24"))
-                    row["market_cap_usd"] = row["market_cap_usd"] or _number(pair.get("marketCap") or pair.get("fdv"))
-                    row["name"] = pair.get("baseToken", {}).get("name") or row["name"]
-                    row["symbol"] = pair.get("baseToken", {}).get("symbol") or row["symbol"]
-                    if not row.get("pool") and pair.get("pairAddress"):
-                        row["pool"] = "solana_" + str(pair["pairAddress"])
-                    row["url"] = row["url"] or pair.get("url")
-                    if "DexScreener" not in row["source"]:
-                        row["source"].append("DexScreener")
+                response = _get_with_backoff(client, endpoint, attempts=2)
+                payload = response.json()
+                for item in payload if isinstance(payload, list) else []:
+                    if item.get("chainId") != SOLANA:
+                        continue
+                    mint = str(item.get("tokenAddress") or "").strip()
+                    if not mint:
+                        continue
+                    candidates.setdefault(mint, {
+                        "mint": mint,
+                        "name": item.get("description") or item.get("header") or "Solana token",
+                        "symbol": "—", "source": ["DexScreener"], "boosted": "amount" in item,
+                    })
+                providers["DexScreener"] = "OK"
             except (httpx.HTTPError, ValueError, TypeError):
-                row["price_error"] = "Price enrichment unavailable"
+                log.exception("DexScreener discovery failed")
+                providers["DexScreener"] = "UNAVAILABLE"
+                errors.append("DexScreener discovery unavailable")
+
+        mints = list(candidates.keys())[:30]
+        pairs_by_mint: dict[str, list[dict[str, Any]]] = {}
+        if mints:
             try:
-                row["onchain"] = _verify_mint(client, rpc_url, row["mint"])
+                response = _get_with_backoff(
+                    client, "https://api.dexscreener.com/tokens/v1/solana/" + ",".join(mints), attempts=2
+                )
+                payload = response.json()
+                pairs = payload if isinstance(payload, list) else (payload.get("pairs") or [] if isinstance(payload, dict) else [])
+                for pair in pairs:
+                    if not isinstance(pair, dict) or pair.get("chainId") != SOLANA:
+                        continue
+                    mint = str((pair.get("baseToken") or {}).get("address") or "")
+                    if mint in candidates:
+                        pairs_by_mint.setdefault(mint, []).append(pair)
+                providers["DexScreener pairs"] = "OK"
+            except (httpx.HTTPError, ValueError, TypeError):
+                log.exception("DexScreener pair batch failed")
+                providers["DexScreener pairs"] = "UNAVAILABLE"
+                errors.append("DexScreener pair data unavailable")
+
+        rows: list[dict[str, Any]] = []
+        for mint, profile in candidates.items():
+            pairs = pairs_by_mint.get(mint, [])
+            if not pairs:
+                continue
+            pair = max(pairs, key=lambda p: _number((p.get("liquidity") or {}).get("usd")) or 0)
+            token = pair.get("baseToken") or {}
+            price = _number(pair.get("priceUsd"))
+            if price is None:
+                continue
+            liquidity = _number((pair.get("liquidity") or {}).get("usd"))
+            volume = _number((pair.get("volume") or {}).get("h24"))
+            cap = _number(pair.get("marketCap") or pair.get("fdv"))
+            row = {
+                "mint": mint, "name": token.get("name") or profile["name"],
+                "symbol": token.get("symbol") or "—",
+                "pool": "solana_" + str(pair.get("pairAddress") or ""),
+                "price_usd": price, "liquidity_usd": liquidity,
+                "volume_24h_usd": volume, "market_cap_usd": cap,
+                "price_change_1h_pct": _number((pair.get("priceChange") or {}).get("h1")),
+                "price_change_24h_pct": _number((pair.get("priceChange") or {}).get("h24")),
+                "source": ["DexScreener"], "url": pair.get("url"),
+                "boosted": bool(profile.get("boosted")), "dex_id": pair.get("dexId"),
+            }
+            try:
+                row["onchain"] = _verify_mint(client, rpc_url, mint)
             except (httpx.HTTPError, ValueError, TypeError, KeyError):
-                row["onchain"] = {"verified": False, "mint_authority_revoked": None, "freeze_authority_revoked": None, "top10_share": None, "reason": "On-chain verification unavailable"}
-            liq = row.get("liquidity_usd")
+                row["onchain"] = {
+                    "verified": False, "mint_authority_revoked": None,
+                    "freeze_authority_revoked": None, "top10_share": None,
+                    "reason": "On-chain verification unavailable",
+                }
             onchain = row["onchain"]
             checks = {
-                "liquidity": liq is not None and liq >= MIN_LIQUIDITY_USD,
+                "liquidity": liquidity is not None and liquidity >= MIN_LIQUIDITY_USD,
                 "mint_authority": onchain.get("mint_authority_revoked") is True,
                 "freeze_authority": onchain.get("freeze_authority_revoked") is True,
                 "whale_concentration": onchain.get("top10_share") is not None and onchain["top10_share"] <= MAX_TOP10_SHARE,
@@ -200,28 +199,26 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             row["ai_score"] = None
             row["entry_status"] = "WAITING_FOR_AI_SCORE" if all(checks.values()) else "REJECTED_OR_UNVERIFIED"
             row["paper_entry_enabled"] = False
-            row["blockers"] = [key for key, passed in checks.items() if not passed] + ["AI score provider not configured", "paper order approval pipeline not connected"]
+            row["blockers"] = [key for key, passed in checks.items() if not passed] + [
+                "AI score provider not configured", "paper order approval pipeline not connected"
+            ]
+            rows.append(row)
+    rows.sort(key=lambda row: (1 if row.get("boosted") else 0, row.get("volume_24h_usd") or 0, row.get("liquidity_usd") or 0), reverse=True)
+    rows = rows[:max(1, min(limit, 30))]
     result = {
-        "mode": "paper_only",
-        "scanner": "read_only",
-        "generated_at": int(time.time()),
-        "elapsed_ms": int((time.time() - started) * 1000),
-        "cache_age_ms": 0,
-        "candidate_count": len(rows),
-        "candidates": rows,
-        "errors": errors,
-        "providers": {
-            "GeckoTerminal": "UNAVAILABLE" if "GeckoTerminal unavailable" in errors else "OK",
-            "DexScreener": "UNAVAILABLE" if "DexScreener unavailable" in errors else "OK",
-        },
-        "policy": {"minimum_liquidity_usd": MIN_LIQUIDITY_USD, "maximum_top10_concentration": MAX_TOP10_SHARE, "take_profit_pct_min": 70, "take_profit_pct_max": 130, "stop_loss_pct": 6, "trailing_drawdown_pct": 12, "position_equity_fraction": 0.08},
+        "mode": "paper_only", "scanner": "dexscreener_only_read_only",
+        "generated_at": int(time.time()), "elapsed_ms": int((time.time() - started) * 1000),
+        "cache_age_ms": 0, "candidate_count": len(rows), "candidates": rows,
+        "errors": errors, "providers": providers,
+        "policy": {"minimum_liquidity_usd": MIN_LIQUIDITY_USD, "maximum_top10_concentration": MAX_TOP10_SHARE,
+                   "take_profit_pct_min": 70, "take_profit_pct_max": 130, "stop_loss_pct": 6,
+                   "trailing_drawdown_pct": 12, "position_equity_fraction": 0.08},
     }
     with _SCAN_CACHE_LOCK:
         _SCAN_CACHE["at"] = time.time()
         _SCAN_CACHE["limit"] = limit
         _SCAN_CACHE["value"] = copy.deepcopy(result)
     return result
-
 
 def scan_market_async(limit: int = 40) -> dict[str, Any]:
     """Run blocking public HTTP/RPC discovery outside the HTTP handler thread."""
