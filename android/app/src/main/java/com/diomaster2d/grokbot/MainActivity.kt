@@ -148,7 +148,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var bloomReport by remember { mutableStateOf("Bloom wallet not checked") }
  var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
  var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketMessage by remember { mutableStateOf("Waiting for live multi-source market feed") }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
- var selectedCoin by remember { mutableStateOf<JSONObject?>(null) }; var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
+ var selectedCoin by remember { mutableStateOf<JSONObject?>(null) }; var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var agentAutoRunning by remember { mutableStateOf(false) }; var agentAutoMessage by remember { mutableStateOf("AUTO AGENTS STOPPED") }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
  LaunchedEffect(Unit) {
@@ -189,6 +189,26 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    }
    activity=(listOf("AUTO START · 10-seat connection sweep complete") + health.map { "${it.key.uppercase()} · ${it.value}" } + reports).take(30)
    message="Auto diagnostics complete · ${health.count{it.value.startsWith("CONNECTED")}}/10 seats online · ${reports.size} checks"
+  }
+ }
+ LaunchedEffect(agentAutoRunning, gateway, token) {
+  if (!agentAutoRunning) return@LaunchedEffect
+  val seats=listOf("chief","scout","risk","whale","sniper","rug","exit","shill","signal","journal")
+  while (agentAutoRunning) {
+   val health=linkedMapOf<String,String>()
+   for (short in seats) {
+    try {
+     val seatClient=DeskClient(gateway.trim().removeSuffix("/"),short,token.trim())
+     val seatTools=seatClient.connect()
+     health[short]="CONNECTED · ${seatTools.size} tools"
+    } catch(e:Exception) { health[short]="OFFLINE" }
+   }
+   agentStatuses=health
+   val online=health.count { it.value.startsWith("CONNECTED") }
+   val stamp=java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.getDefault()).format(java.util.Date())
+   agentAutoMessage="AUTO AGENT MONITOR · $online/10 seats online · $stamp · PAPER / READ-ONLY"
+   activity=(listOf(agentAutoMessage)+health.map { "${it.key.uppercase()} · ${it.value}" }+activity).take(30)
+   delay(60_000)
   }
  }
  LaunchedEffect(client) {
@@ -385,6 +405,23 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     1 -> {
      item { Text("PUMPGROK AGENT NETWORK",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      item { CardBox { Text("10 specialist seats · PumpGrok role definitions. Tool access is controlled by the server roster.",fontSize=12.sp,color=Muted) } }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text(agentAutoMessage,fontSize=11.sp,color=if(agentAutoRunning) Green else Muted,fontWeight=FontWeight.Bold)
+      Text("Η αυτόματη λειτουργία ελέγχει ανά 60″ τη σύνδεση και τα διαθέσιμα εργαλεία των 10 seats. Είναι PAPER / READ-ONLY: δεν στέλνει εντολές αγοράς ή πώλησης.",fontSize=10.sp,color=Muted)
+      Button(onClick={
+       if(agentAutoRunning) {
+        agentAutoRunning=false
+        agentAutoMessage="AUTO AGENTS STOPPED"
+       } else {
+        require(token.isNotBlank()) { "Βάλε πρώτα το gateway token στις Rules." }
+        require(gateway.startsWith("https://")) { "Χρειάζεται HTTPS gateway." }
+        agentAutoRunning=true
+        agentAutoMessage="STARTING · checking 10 agent seats..."
+       }
+      },enabled=!busy,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=if(agentAutoRunning) Color(0xFF8B3030) else Green,contentColor=Color.Black)) {
+       Text(if(agentAutoRunning) "STOP AUTO AGENTS" else "START AUTO AGENTS")
+      }
+     } } }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
       Text("ACTIVE AGENT SEAT",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
       OutlinedTextField(seat,{seat=it.trim().lowercase()},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("chief / scout / risk / whale / sniper / rug / exit / shill / signal / journal")})
