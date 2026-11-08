@@ -418,7 +418,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         agentAutoRunning=true
         agentAutoMessage="STARTING · checking 10 agent seats..."
        }
-      },enabled=!busy,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=if(agentAutoRunning) Color(0xFF8B3030) else Green,contentColor=Color.Black)) {
+      },enabled=!busy&&token.isNotBlank(),modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=if(agentAutoRunning) Color(0xFF8B3030) else Green,contentColor=Color.Black)) {
        Text(if(agentAutoRunning) "STOP AUTO AGENTS" else "START AUTO AGENTS")
       }
      } } }
