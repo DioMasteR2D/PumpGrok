@@ -280,10 +280,10 @@ def _agent_market_decisions(row: dict[str, Any]) -> list[dict[str, str]]:
     liquidity = row.get("liquidity_usd")
     change_1h = row.get("price_change_1h_pct")
     ratio = (volume / liquidity) if isinstance(volume, (int, float)) and isinstance(liquidity, (int, float)) and liquidity > 0 else None
-    discovered = "PumpPortal" in row.get("source", [])
+    discovered = row.get("trend") == "NEW"
     momentum = (isinstance(change_1h, (int, float)) and change_1h >= 5) or (ratio is not None and ratio >= 1.0)
     return [
-        {"agent": "SCOUT", "decision": "NEW TOKEN" if discovered else "TRENDING POOL", "reason": "Live discovery feed" if discovered else "GeckoTerminal trending/new-pool feed"},
+        {"agent": "SCOUT", "decision": "NEW TOKEN" if discovered else "TRENDING POOL", "reason": "DexScreener latest token profile/boost" if discovered else "DexScreener live pair data"},
         {"agent": "SIGNAL", "decision": "MOMENTUM WATCH" if momentum else "NO CONFIRMED MOMENTUM", "reason": f"1h change={change_1h if change_1h is not None else 'n/a'}%; 24h volume/liquidity={round(ratio, 2) if ratio is not None else 'n/a'}"},
         {"agent": "WHALE", "decision": "FLOW UNKNOWN", "reason": "Wallet-level trade flow is not connected to this snapshot"},
         {"agent": "RUG", "decision": "UNVERIFIED", "reason": "Mint/freeze authority and holder concentration not checked in this fast feed"},
@@ -296,238 +296,147 @@ def _agent_market_decisions(row: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915
-    """Aggregate live Solana trends from GeckoTerminal, DexScreener, Jupiter and PumpPortal."""
+def market_home(limit: int = 20) -> dict[str, Any]:
+    """Build the Solana market exclusively from DexScreener live token pairs."""
     import copy
-    from desk_gateway.market_stream import snapshot as pumpportal_snapshot
 
     if not 1 <= limit <= 30:
         raise ValueError("limit must be between 1 and 30")
     now = time.time()
     with _HOME_CACHE_LOCK:
         cached = _HOME_CACHE.get("value")
-        if cached is not None and now - float(_HOME_CACHE.get("at", 0.0)) < 30:
+        if cached is not None and now - float(_HOME_CACHE.get("at", 0.0)) < 20:
             result = copy.deepcopy(cached)
             result["cache_age_ms"] = int((now - float(_HOME_CACHE["at"])) * 1000)
             return result
 
     started = time.time()
-    rows: dict[str, dict[str, Any]] = {}
-    providers: list[dict[str, Any]] = []
     errors: list[str] = []
-    timeout = httpx.Timeout(7.0, connect=3.0)
+    providers: list[dict[str, Any]] = []
+    discovered: dict[str, dict[str, Any]] = {}
+    timeout = httpx.Timeout(8.0, connect=3.0)
     with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}) as client:
-        # GeckoTerminal supplies trend ranking and new-pool discovery. Public API
-        # freshness is provider-controlled; we expose our own fetched timestamp.
-        for endpoint, label, kind in (
-            ("https://api.geckoterminal.com/api/v2/networks/solana/trending_pools", "GeckoTerminal", "TRENDING"),
-            (GECKO_NEW_POOLS, "GeckoTerminal", "NEW POOL"),
+        # DexScreener is the only discovery and market-data provider.
+        for endpoint, label in (
+            (DEX_PROFILES, "latest token profiles"),
+            ("https://api.dexscreener.com/token-boosts/latest/v1", "latest token boosts"),
         ):
             try:
-                response = client.get(
-                    endpoint,
-                    params={"include": "base_token"},
-                    headers={"Accept": "application/json;version=20230203"},
-                )
-                response.raise_for_status()
+                response = _get_with_backoff(client, endpoint, attempts=2)
                 payload = response.json()
-                included = {item.get("id"): item for item in payload.get("included", []) if isinstance(item, dict)}
                 count = 0
-                for pool in payload.get("data", []):
-                    attrs = pool.get("attributes") or {}
-                    rel = pool.get("relationships") or {}
-                    base_id = (((rel.get("base_token") or {}).get("data") or {}).get("id"))
-                    token = included.get(base_id, {}).get("attributes", {})
-                    mint = str(token.get("address") or (base_id or "").split("_")[-1])
+                for item in payload if isinstance(payload, list) else []:
+                    if item.get("chainId") != SOLANA:
+                        continue
+                    mint = str(item.get("tokenAddress") or "").strip()
                     if not mint:
                         continue
-                    row = rows.setdefault(mint, {
-                        "mint": mint, "name": token.get("name") or attrs.get("name") or "Unknown",
-                        "symbol": token.get("symbol") or "—", "pool": pool.get("id"),
-                        "price_usd": _number(attrs.get("base_token_price_usd")),
-                        "liquidity_usd": _number(attrs.get("reserve_in_usd")),
-                        "volume_24h_usd": _number((attrs.get("volume_usd") or {}).get("h24")),
-                        "market_cap_usd": _number(attrs.get("market_cap_usd") or attrs.get("fdv_usd")),
-                        "price_change_1h_pct": _number((attrs.get("price_change_percentage") or {}).get("h1")),
-                        "price_change_24h_pct": _number((attrs.get("price_change_percentage") or {}).get("h24")),
-                        "source": [], "url": None, "trend": kind,
+                    row = discovered.setdefault(mint, {
+                        "mint": mint, "name": item.get("description") or item.get("header") or "Solana token",
+                        "symbol": "—", "trend": "NEW", "boosted": False,
                     })
-                    if label not in row["source"]:
-                        row["source"].append(label)
-                    if kind == "TRENDING":
-                        row["trend"] = kind
+                    row["boosted"] = row["boosted"] or "amount" in item
                     count += 1
-                providers.append({"name": label + " " + kind.lower(), "status": "OK", "items": count})
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
-                log.warning("market home provider failed: %s %s", label, kind)
-                providers.append({"name": label + " " + kind.lower(), "status": "UNAVAILABLE"})
-                errors.append(label + " " + kind.lower() + " unavailable")
-
-        # DexScreener contributes newest token profiles and pair-level cross-checks.
-        try:
-            response = client.get(DEX_PROFILES)
-            response.raise_for_status()
-            profiles = response.json()
-            added = 0
-            for profile in profiles if isinstance(profiles, list) else []:
-                if profile.get("chainId") != SOLANA:
-                    continue
-                mint = str(profile.get("tokenAddress") or "")
-                if not mint:
-                    continue
-                row = rows.setdefault(mint, {
-                    "mint": mint, "name": profile.get("description") or profile.get("header") or "New Solana token",
-                    "symbol": "—", "pool": None, "price_usd": None, "liquidity_usd": None,
-                    "volume_24h_usd": None, "market_cap_usd": None, "price_change_1h_pct": None,
-                    "price_change_24h_pct": None, "source": [], "url": profile.get("url"), "trend": "NEW",
-                })
-                if "DexScreener" not in row["source"]:
-                    row["source"].append("DexScreener")
-                row["url"] = row["url"] or profile.get("url")
-                added += 1
-            providers.append({"name": "DexScreener profiles", "status": "OK", "items": added})
-        except (httpx.HTTPError, ValueError, TypeError):
-            providers.append({"name": "DexScreener profiles", "status": "UNAVAILABLE"})
-            errors.append("DexScreener profiles unavailable")
-
-        # Enrich every row that can appear on the home screen in one bounded
-        # DexScreener batch request (up to 30 mints). This also covers fresh
-        # PumpPortal events, which otherwise dominated the first page with N/A.
-        enrich = list(rows.values())[:30]
-        mint_groups = {row["mint"]: row for row in enrich}
-        if mint_groups:
-            try:
-                mint_path = ",".join(mint_groups.keys())
-                response = client.get(f"https://api.dexscreener.com/tokens/v1/solana/{mint_path}")
-                response.raise_for_status()
-                pairs_by_mint: dict[str, list[dict[str, Any]]] = {}
-                payload = response.json()
-                # The v1 batch endpoint returns a JSON array, unlike /latest/dex/tokens.
-                pair_rows = payload if isinstance(payload, list) else (payload.get("pairs", []) if isinstance(payload, dict) else [])
-                for pair in pair_rows or []:
-                    if pair.get("chainId") != SOLANA:
-                        continue
-                    base_mint = str((pair.get("baseToken") or {}).get("address") or "")
-                    if base_mint in mint_groups:
-                        pairs_by_mint.setdefault(base_mint, []).append(pair)
-                for mint, row in mint_groups.items():
-                    pairs = pairs_by_mint.get(mint, [])
-                    if not pairs:
-                        continue
-                    pair = max(pairs, key=lambda p: _number((p.get("liquidity") or {}).get("usd")) or 0)
-                    row["price_usd"] = _number(pair.get("priceUsd")) or row.get("price_usd")
-                    row["liquidity_usd"] = _number((pair.get("liquidity") or {}).get("usd")) or row.get("liquidity_usd")
-                    row["volume_24h_usd"] = _number((pair.get("volume") or {}).get("h24")) or row.get("volume_24h_usd")
-                    row["market_cap_usd"] = _number(pair.get("marketCap") or pair.get("fdv")) or row.get("market_cap_usd")
-                    row["price_change_1h_pct"] = _number((pair.get("priceChange") or {}).get("h1")) if (pair.get("priceChange") or {}).get("h1") is not None else row.get("price_change_1h_pct")
-                    row["price_change_24h_pct"] = _number((pair.get("priceChange") or {}).get("h24")) if (pair.get("priceChange") or {}).get("h24") is not None else row.get("price_change_24h_pct")
-                    row["name"] = pair.get("baseToken", {}).get("name") or row["name"]
-                    row["symbol"] = pair.get("baseToken", {}).get("symbol") or row["symbol"]
-                    if not row.get("pool") and pair.get("pairAddress"):
-                        row["pool"] = "solana_" + str(pair["pairAddress"])
-                    row["url"] = pair.get("url") or row.get("url")
-                    if "DexScreener" not in row["source"]:
-                        row["source"].append("DexScreener")
-                providers.append({"name": "DexScreener pair batch", "status": "OK", "requested": len(mint_groups), "matched": len(pairs_by_mint)})
+                providers.append({"name": "DexScreener " + label, "status": "OK", "items": count})
             except (httpx.HTTPError, ValueError, TypeError):
-                log.exception("DexScreener batch enrichment failed")
-                providers.append({"name": "DexScreener pair batch", "status": "UNAVAILABLE"})
-                errors.append("DexScreener pair enrichment unavailable")
-                for row in enrich:
-                    row["price_enrichment"] = "unavailable"
+                log.exception("DexScreener %s failed", label)
+                providers.append({"name": "DexScreener " + label, "status": "UNAVAILABLE"})
+                errors.append("DexScreener " + label + " unavailable")
 
-        # Jupiter is a price cross-check. Missing quotes stay null, never zero.
-        mints = list(rows.keys())[:30]
+        # Enrich up to 30 unique Solana mints in one supported batch request.
+        mints = list(discovered.keys())[:30]
+        matched: dict[str, list[dict[str, Any]]] = {}
         if mints:
             try:
-                headers = {"Accept": "application/json"}
-                api_key = os.environ.get("JUPITER_API_KEY", "").strip()
-                if api_key:
-                    headers["x-api-key"] = api_key
-                response = client.get("https://api.jup.ag/price/v3", params={"ids": ",".join(mints)}, headers=headers)
-                if response.is_success:
-                    price_map = response.json()
-                    for mint, quote in price_map.items():
-                        if mint in rows and isinstance(quote, dict) and quote.get("usdPrice") is not None:
-                            rows[mint]["jupiter_price_usd"] = _number(quote.get("usdPrice"))
-                            if rows[mint].get("price_usd") is None:
-                                rows[mint]["price_usd"] = _number(quote.get("usdPrice"))
-                            if "Jupiter" not in rows[mint]["source"]:
-                                rows[mint]["source"].append("Jupiter")
-                providers.append({"name": "Jupiter Price V3", "status": "OK" if response.is_success else "UNAVAILABLE"})
+                response = _get_with_backoff(
+                    client, "https://api.dexscreener.com/tokens/v1/solana/" + ",".join(mints), attempts=2
+                )
+                payload = response.json()
+                pairs = payload if isinstance(payload, list) else (payload.get("pairs") or [] if isinstance(payload, dict) else [])
+                for pair in pairs:
+                    if not isinstance(pair, dict) or pair.get("chainId") != SOLANA:
+                        continue
+                    mint = str((pair.get("baseToken") or {}).get("address") or "")
+                    if mint in discovered:
+                        matched.setdefault(mint, []).append(pair)
+                providers.append({
+                    "name": "DexScreener live pairs", "status": "OK",
+                    "requested": len(mints), "matched": len(matched),
+                })
             except (httpx.HTTPError, ValueError, TypeError):
-                providers.append({"name": "Jupiter Price V3", "status": "UNAVAILABLE"})
-                errors.append("Jupiter price cross-check unavailable")
+                log.exception("DexScreener live-pair batch failed")
+                providers.append({"name": "DexScreener live pairs", "status": "UNAVAILABLE"})
+                errors.append("DexScreener live-pair data unavailable")
 
-    pump = pumpportal_snapshot(80)
-    pump_events = pump.get("events", [])
-    pump_mints = set()
-    for event in pump_events:
-        if int(event.get("received_at") or 0) < int(time.time()) - 180:
+    output: list[dict[str, Any]] = []
+    for mint, profile in discovered.items():
+        pairs = matched.get(mint, [])
+        if not pairs:
             continue
-        mint = str(event.get("mint") or "")
-        if not mint:
+        # Prefer the most liquid real pair, not an arbitrary or stale pair.
+        pair = max(pairs, key=lambda p: _number((p.get("liquidity") or {}).get("usd")) or 0)
+        token = pair.get("baseToken") or {}
+        price = _number(pair.get("priceUsd"))
+        if price is None:
             continue
-        pump_mints.add(mint)
-        row = rows.setdefault(mint, {
-            "mint": mint, "name": event.get("name") or "New PumpPortal token",
-            "symbol": event.get("symbol") or "—", "pool": event.get("pool"),
-            "price_usd": None, "liquidity_usd": None, "volume_24h_usd": None,
-            "market_cap_usd": None, "price_change_1h_pct": None, "price_change_24h_pct": None,
-            "source": [], "url": None, "trend": "NEW LIVE",
-        })
-        if "PumpPortal" not in row["source"]:
-            row["source"].append("PumpPortal")
-        row["last_stream_event"] = event.get("received_at")
-        row["stream_event_type"] = event.get("type")
-
-    providers.append({
-        "name": "PumpPortal WebSocket",
-        "status": "CONNECTED" if pump.get("connected") else "RECONNECTING",
-        "last_event_at": pump.get("last_event_at"),
-        "reconnects": pump.get("reconnects", 0),
-        "items": len(pump_events),
-    })
-
-    output = list(rows.values())
-    for row in output:
+        liquidity = _number((pair.get("liquidity") or {}).get("usd"))
+        volume = _number((pair.get("volume") or {}).get("h24"))
+        cap = _number(pair.get("marketCap") or pair.get("fdv"))
+        row = {
+            "mint": mint,
+            "name": token.get("name") or profile.get("name") or "Unknown",
+            "symbol": token.get("symbol") or "—",
+            "pool": "solana_" + str(pair.get("pairAddress") or ""),
+            "price_usd": price,
+            "liquidity_usd": liquidity,
+            "volume_24h_usd": volume,
+            "market_cap_usd": cap,
+            "price_change_1h_pct": _number((pair.get("priceChange") or {}).get("h1")),
+            "price_change_24h_pct": _number((pair.get("priceChange") or {}).get("h24")),
+            "source": ["DexScreener"],
+            "url": pair.get("url"),
+            "trend": "NEW",
+            "boosted": bool(profile.get("boosted")),
+            "pair_created_at": pair.get("pairCreatedAt"),
+            "dex_id": pair.get("dexId"),
+        }
         row["agents"] = _agent_market_decisions(row)
         row["entry_status"] = "BLOCKED_UNVERIFIED"
         row["paper_entry_enabled"] = False
         row["risk_gate"] = "BLOCKED · VERIFY TOKEN AUTHORITIES + HOLDERS"
         row["momentum_ratio"] = (
-            round(row["volume_24h_usd"] / row["liquidity_usd"], 2)
-            if isinstance(row.get("volume_24h_usd"), (int, float))
-            and isinstance(row.get("liquidity_usd"), (int, float))
-            and row["liquidity_usd"] > 0 else None
+            round(volume / liquidity, 2)
+            if isinstance(volume, (int, float)) and isinstance(liquidity, (int, float)) and liquidity > 0
+            else None
         )
+        output.append(row)
+
     output.sort(
-        key=lambda r: (
-            1 if r["mint"] in pump_mints else 0,
-            1 if r.get("trend") == "TRENDING" else 0,
-            r.get("volume_24h_usd") or 0,
+        key=lambda row: (
+            1 if row.get("boosted") else 0,
+            row.get("volume_24h_usd") or 0,
+            row.get("liquidity_usd") or 0,
         ),
         reverse=True,
     )
+    output = output[:limit]
     result = {
         "mode": "paper_only",
-        "scanner": "multi_source_market_home",
+        "scanner": "dexscreener_solana_only",
         "generated_at": int(time.time()),
         "elapsed_ms": int((time.time() - started) * 1000),
         "cache_age_ms": 0,
-        "candidate_count": min(len(output), limit),
-        "candidates": output[:limit],
+        "candidate_count": len(output),
+        "candidates": output,
         "providers": providers,
-        "pumpportal_stream": {k: v for k, v in pump.items() if k != "events"},
         "errors": errors,
-        "decision_policy": "Transparent rule-based read-only agent assessments; no fabricated AI output.",
+        "decision_policy": "DexScreener live pair data only; transparent rule-based read-only agent assessments.",
         "execution": "LOCKED · no live orders",
     }
     with _HOME_CACHE_LOCK:
         _HOME_CACHE["at"] = time.time()
         _HOME_CACHE["value"] = copy.deepcopy(result)
     return result
-
 
 
 def market_chart(pool_id: str, timeframe: str = "minute", aggregate: int = 5, limit: int = 100) -> dict[str, Any]:
