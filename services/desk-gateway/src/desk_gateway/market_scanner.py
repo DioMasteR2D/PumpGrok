@@ -167,6 +167,8 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             if price is None:
                 continue
             liquidity = _number((pair.get("liquidity") or {}).get("usd"))
+            if liquidity is None or liquidity <= 0:
+                continue
             volume = _number((pair.get("volume") or {}).get("h24"))
             cap = _number(pair.get("marketCap") or pair.get("fdv"))
             row = {
@@ -246,6 +248,8 @@ def search_market(query: str, limit: int = 20) -> dict[str, Any]:
         pair = max(valid, key=lambda p: _number((p.get("liquidity") or {}).get("usd")) or 0)
         token = pair.get("baseToken") or {}
         liquidity = _number((pair.get("liquidity") or {}).get("usd"))
+        if liquidity is None or liquidity <= 0:
+            continue
         volume = _number((pair.get("volume") or {}).get("h24"))
         cap = _number(pair.get("marketCap") or pair.get("fdv"))
         rows.append({
