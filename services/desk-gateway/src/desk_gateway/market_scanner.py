@@ -398,10 +398,13 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
         if mint_groups:
             try:
                 mint_path = ",".join(mint_groups.keys())
-                response = client.get(f"https://api.dexscreener.com/latest/dex/tokens/{mint_path}")
+                response = client.get(f"https://api.dexscreener.com/tokens/v1/solana/{mint_path}")
                 response.raise_for_status()
                 pairs_by_mint: dict[str, list[dict[str, Any]]] = {}
-                for pair in response.json().get("pairs", []) or []:
+                payload = response.json()
+                # The v1 batch endpoint returns a JSON array, unlike /latest/dex/tokens.
+                pair_rows = payload if isinstance(payload, list) else (payload.get("pairs", []) if isinstance(payload, dict) else [])
+                for pair in pair_rows or []:
                     if pair.get("chainId") != SOLANA:
                         continue
                     base_mint = str((pair.get("baseToken") or {}).get("address") or "")
