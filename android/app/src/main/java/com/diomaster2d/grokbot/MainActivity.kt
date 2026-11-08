@@ -3,6 +3,8 @@ package com.diomaster2d.grokbot
 import android.os.Bundle
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.webkit.CookieManager
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -615,9 +617,15 @@ class DeskClient(private val base:String,private val seat:String,private val tok
           WebView(context).apply {
            settings.javaScriptEnabled=true
            settings.domStorageEnabled=true
+           settings.databaseEnabled=true
            settings.loadsImagesAutomatically=true
-           settings.mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+           settings.mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+           settings.setSupportMultipleWindows(false)
+           CookieManager.getInstance().setAcceptCookie(true)
+           CookieManager.getInstance().setAcceptThirdPartyCookies(this,true)
+           webChromeClient=WebChromeClient()
            webViewClient=WebViewClient()
+           setBackgroundColor(android.graphics.Color.rgb(9,11,16))
            tag=chartUrl
            loadUrl(chartUrl)
           }
