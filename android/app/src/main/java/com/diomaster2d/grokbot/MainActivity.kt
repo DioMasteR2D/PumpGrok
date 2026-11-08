@@ -601,30 +601,31 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         Metric("24H CHANGE",if(change.isFinite()) String.format(java.util.Locale.US,"%+.2f%%",change) else "N/A",if(change.isFinite()&&change>=0) Green else Red)
         Metric("LIQUIDITY",coin.optDouble("liquidity_usd",Double.NaN).let { if(it.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",it) else "N/A" },Color.White)
        }
-       Text("PRICE CHART · REAL ON-CHAIN OHLCV",fontSize=11.sp,color=Blue,fontWeight=FontWeight.Bold)
-       val candles=chartData?.optJSONArray("candles")
-       if(candles!=null && candles.length()>=2) {
-        Canvas(Modifier.fillMaxWidth().height(230.dp).background(Color(0xFF090B10),RoundedCornerShape(12.dp)).padding(12.dp)) {
-         val values=(0 until candles.length()).mapNotNull { candles.optJSONObject(it)?.optDouble("close")?.takeIf { v -> v.isFinite() && v>0 } }
-         if(values.size>=2) {
-          val minV=values.minOrNull() ?: 0.0; val maxV=values.maxOrNull() ?: 1.0
-          val span=(maxV-minV).takeIf { it>0 } ?: (maxV*0.0001).coerceAtLeast(1e-12)
-          val path=Path()
-          values.forEachIndexed { index,value ->
-           val x=size.width*index/(values.size-1).toFloat()
-           val y=size.height-( ((value-minV)/span).toFloat()*size.height )
-           if(index==0) path.moveTo(x,y) else path.lineTo(x,y)
+       Text("PRICE CHART · DEXSCREENER",fontSize=11.sp,color=Blue,fontWeight=FontWeight.Bold)
+       val pairAddress=coin.optString("pool","").substringAfter("_",coin.optString("pool","")).takeIf { it.isNotBlank() }
+       val chartUrl=pairAddress?.let { "https://dexscreener.com/solana/"+it+"?embed=1&theme=dark&trades=0&info=0" }
+       if(chartUrl!=null) {
+        AndroidView(
+         modifier=Modifier.fillMaxWidth().height(390.dp),
+         factory={ context ->
+          WebView(context).apply {
+           settings.javaScriptEnabled=true
+           settings.domStorageEnabled=true
+           settings.loadsImagesAutomatically=true
+           settings.mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+           webViewClient=WebViewClient()
+           tag=chartUrl
+           loadUrl(chartUrl)
           }
-          drawPath(path,if(values.last()>=values.first()) Green else Red,style=androidx.compose.ui.graphics.drawscope.Stroke(width=3.dp.toPx()))
-         }
-        }
-        Text(chartMessage,fontSize=9.sp,color=Muted)
+         },
+         update={ view -> if(view.tag!=chartUrl) { view.tag=chartUrl; view.loadUrl(chartUrl) } }
+        )
        } else {
-        Box(Modifier.fillMaxWidth().height(180.dp).background(Color(0xFF090B10),RoundedCornerShape(12.dp)),contentAlignment=Alignment.Center) {
-         Text(chartMessage,fontSize=11.sp,color=Muted)
+        Box(Modifier.fillMaxWidth().height(150.dp).background(Color(0xFF090B10),RoundedCornerShape(12.dp)),contentAlignment=Alignment.Center) {
+         Text("Το DexScreener δεν επέστρεψε ενεργό pair για αυτό το token.",fontSize=11.sp,color=Muted)
         }
        }
-       Text("Source: authenticated /market/chart · GeckoTerminal OHLCV · USD · read-only",fontSize=9.sp,color=Muted)
+       Text("SOURCE: DEXSCREENER · SOLANA PAIR · READ-ONLY",fontSize=9.sp,color=Muted)
       } } }
      }
      val candidates=marketData?.optJSONArray("candidates")
