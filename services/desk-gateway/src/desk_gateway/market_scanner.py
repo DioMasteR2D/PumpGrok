@@ -7,6 +7,7 @@ reported as unknown and never treated as a pass.
 """
 from __future__ import annotations
 
+import copy
 import logging
 import os
 import threading
@@ -21,6 +22,39 @@ GECKO_NEW_POOLS = "https://api.geckoterminal.com/api/v2/networks/solana/new_pool
 DEX_PROFILES = "https://api.dexscreener.com/token-profiles/latest/v1"
 MIN_LIQUIDITY_USD = 40_000.0
 MAX_TOP10_SHARE = 0.25
+
+# Avoid repeated upstream calls when clients refresh or switch market tabs.
+_SCAN_CACHE_LOCK = threading.Lock()
+_SCAN_CACHE: dict[str, Any] = {"at": 0.0, "value": None}
+_SCAN_CACHE_TTL_S = 25.0
+
+
+def _get_with_backoff(
+    client: httpx.Client,
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    attempts: int = 3,
+) -> httpx.Response:
+    """Respect Retry-After and retry transient provider errors with bounded delay."""
+    last_response: httpx.Response | None = None
+    for attempt in range(max(1, attempts)):
+        response = client.get(url, params=params)
+        last_response = response
+        if response.status_code != 429 and response.status_code < 500:
+            response.raise_for_status()
+            return response
+        if attempt + 1 >= attempts:
+            response.raise_for_status()
+        retry_after = response.headers.get("Retry-After", "")
+        try:
+            delay = min(3.0, max(0.25, float(retry_after)))
+        except (TypeError, ValueError):
+            delay = min(2.0, 0.4 * (2 ** attempt))
+        time.sleep(delay)
+    assert last_response is not None
+    last_response.raise_for_status()
+    return last_response
 
 
 def _number(value: Any) -> float | None:
@@ -68,13 +102,20 @@ def _verify_mint(client: httpx.Client, rpc_url: str, mint: str) -> dict[str, Any
 def scan_market(limit: int = 40) -> dict[str, Any]:
     """Fetch discovery candidates and enrich with confirmed RPC safety facts."""
     started = time.time()
+    with _SCAN_CACHE_LOCK:
+        cached = _SCAN_CACHE.get("value")
+        age = time.time() - float(_SCAN_CACHE.get("at", 0.0))
+        if cached is not None and _SCAN_CACHE.get("limit") == limit and age < _SCAN_CACHE_TTL_S:
+            result = copy.deepcopy(cached)
+            result["cache_age_ms"] = int(age * 1000)
+            return result
     rpc_url = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip()
     timeout = httpx.Timeout(12.0, connect=5.0)
     candidates: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
     with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}) as client:
         try:
-            response = client.get(GECKO_NEW_POOLS, params={"page": 1})
+            response = _get_with_backoff(client, GECKO_NEW_POOLS, params={"page": 1})
             response.raise_for_status()
             payload = response.json()
             included = {item.get("id"): item for item in payload.get("included", []) if isinstance(item, dict)}
@@ -99,7 +140,7 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             log.exception("GeckoTerminal discovery failed")
             errors.append("GeckoTerminal unavailable")
         try:
-            response = client.get(DEX_PROFILES)
+            response = _get_with_backoff(client, DEX_PROFILES)
             response.raise_for_status()
             profiles = response.json()
             for profile in profiles if isinstance(profiles, list) else []:
@@ -121,10 +162,11 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             errors.append("DexScreener unavailable")
 
         rows = list(candidates.values())[:max(1, min(limit, 100))]
-        # Use DexScreener pair data as a second source for price/liquidity/volume.
-        for row in rows:
+        # Enrich only the first ten rows to stay within public provider rate limits.
+        # Remaining rows retain discovery values and are not discarded.
+        for row in rows[:10]:
             try:
-                response = client.get(f"https://api.dexscreener.com/latest/dex/tokens/{row['mint']}")
+                response = _get_with_backoff(client, f"https://api.dexscreener.com/latest/dex/tokens/{row['mint']}", attempts=2)
                 response.raise_for_status()
                 pairs = [p for p in response.json().get("pairs", []) if p.get("chainId") == SOLANA]
                 if pairs:
@@ -157,16 +199,26 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             row["entry_status"] = "WAITING_FOR_AI_SCORE" if all(checks.values()) else "REJECTED_OR_UNVERIFIED"
             row["paper_entry_enabled"] = False
             row["blockers"] = [key for key, passed in checks.items() if not passed] + ["AI score provider not configured", "paper order approval pipeline not connected"]
-    return {
+    result = {
         "mode": "paper_only",
         "scanner": "read_only",
         "generated_at": int(time.time()),
         "elapsed_ms": int((time.time() - started) * 1000),
+        "cache_age_ms": 0,
         "candidate_count": len(rows),
         "candidates": rows,
         "errors": errors,
+        "providers": {
+            "GeckoTerminal": "UNAVAILABLE" if "GeckoTerminal unavailable" in errors else "OK",
+            "DexScreener": "UNAVAILABLE" if "DexScreener unavailable" in errors else "OK",
+        },
         "policy": {"minimum_liquidity_usd": MIN_LIQUIDITY_USD, "maximum_top10_concentration": MAX_TOP10_SHARE, "take_profit_pct_min": 70, "take_profit_pct_max": 130, "stop_loss_pct": 6, "trailing_drawdown_pct": 12, "position_equity_fraction": 0.08},
     }
+    with _SCAN_CACHE_LOCK:
+        _SCAN_CACHE["at"] = time.time()
+        _SCAN_CACHE["limit"] = limit
+        _SCAN_CACHE["value"] = copy.deepcopy(result)
+    return result
 
 
 def scan_market_async(limit: int = 40) -> dict[str, Any]:
