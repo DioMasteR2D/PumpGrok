@@ -578,8 +578,15 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         Metric("24H CHANGE",if(change.isFinite()) String.format(java.util.Locale.US,"%+.2f%%",change) else "N/A",if(change.isFinite()&&change>=0) Green else Red)
         Metric("LIQUIDITY",coin.optDouble("liquidity_usd",Double.NaN).let { if(it.isFinite()) "$"+String.format(java.util.Locale.US,"%.0f",it) else "N/A" },Color.White)
        }
-       Text("PRICE CHART · DEXSCREENER",fontSize=11.sp,color=Blue,fontWeight=FontWeight.Bold)
-       if(mint.isNotBlank()) {
+       Text("PRICE CHART · GECKOTERMINAL LIVE POOL",fontSize=11.sp,color=Blue,fontWeight=FontWeight.Bold)
+       val poolRaw=coin.optString("pool","")
+       val poolAddress=poolRaw.substringAfter("_",poolRaw).takeIf { it.isNotBlank() }
+       val chartUrl=if(!poolAddress.isNullOrBlank()) {
+        "https://www.geckoterminal.com/solana/pools/"+poolAddress+"?embed=1&info=0&swaps=0"
+       } else if(mint.isNotBlank()) {
+        "https://dexscreener.com/solana/"+mint+"?embed=1&theme=dark&trades=0&info=0"
+       } else ""
+       if(chartUrl.isNotBlank()) {
         AndroidView(
          modifier=Modifier.fillMaxWidth().height(390.dp),
          factory={ context ->
@@ -587,17 +594,19 @@ class DeskClient(private val base:String,private val seat:String,private val tok
            settings.javaScriptEnabled=true
            settings.domStorageEnabled=true
            settings.loadsImagesAutomatically=true
+           settings.mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
            webViewClient=WebViewClient()
-           loadUrl("https://dexscreener.com/solana/"+mint+"?embed=1&theme=dark&trades=0&info=0")
+           tag=chartUrl
+           loadUrl(chartUrl)
           }
          },
          update={ view ->
-          val target="https://dexscreener.com/solana/"+mint+"?embed=1&theme=dark&trades=0&info=0"
-          if(view.tag!=target) { view.tag=target; view.loadUrl(target) }
+          if(view.tag!=chartUrl) { view.tag=chartUrl; view.loadUrl(chartUrl) }
          }
         )
-       } else Text("Chart unavailable: token mint missing.",fontSize=11.sp,color=Muted)
-       Text("Read-only market view · no buy/sell actions.",fontSize=10.sp,color=Muted)
+        if(poolAddress.isNullOrBlank()) Text("Προβολή token chart μέσω DexScreener · δεν βρέθηκε pool στο GeckoTerminal.",fontSize=10.sp,color=Muted)
+       } else Text("Δεν υπάρχουν διαθέσιμα στοιχεία για γράφημα.",fontSize=11.sp,color=Muted)
+       Text("OHLCV API: /market/chart · GeckoTerminal · USD · read-only",fontSize=10.sp,color=Muted)
       } } }
      }
      val candidates=marketData?.optJSONArray("candidates")

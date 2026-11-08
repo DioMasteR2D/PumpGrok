@@ -177,6 +177,8 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
                     row["market_cap_usd"] = row["market_cap_usd"] or _number(pair.get("marketCap") or pair.get("fdv"))
                     row["name"] = pair.get("baseToken", {}).get("name") or row["name"]
                     row["symbol"] = pair.get("baseToken", {}).get("symbol") or row["symbol"]
+                    if not row.get("pool") and pair.get("pairAddress"):
+                        row["pool"] = "solana_" + str(pair["pairAddress"])
                     row["url"] = row["url"] or pair.get("url")
                     if "DexScreener" not in row["source"]:
                         row["source"].append("DexScreener")
@@ -405,6 +407,8 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
                     row["price_change_24h_pct"] = _number((pair.get("priceChange") or {}).get("h24")) if (pair.get("priceChange") or {}).get("h24") is not None else row.get("price_change_24h_pct")
                     row["name"] = pair.get("baseToken", {}).get("name") or row["name"]
                     row["symbol"] = pair.get("baseToken", {}).get("symbol") or row["symbol"]
+                    if not row.get("pool") and pair.get("pairAddress"):
+                        row["pool"] = "solana_" + str(pair["pairAddress"])
                     row["url"] = pair.get("url") or row.get("url")
                     if "DexScreener" not in row["source"]:
                         row["source"].append("DexScreener")
@@ -502,3 +506,49 @@ def market_home(limit: int = 20) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0
         _HOME_CACHE["at"] = time.time()
         _HOME_CACHE["value"] = copy.deepcopy(result)
     return result
+
+
+
+def market_chart(pool_id: str, timeframe: str = "minute", aggregate: int = 5, limit: int = 100) -> dict[str, Any]:
+    """Return real GeckoTerminal OHLCV candles for a discovered Solana pool."""
+    pool = pool_id.strip()
+    if "_" in pool:
+        network, pool = pool.split("_", 1)
+    else:
+        network = SOLANA
+    if network != SOLANA or not pool or len(pool) > 100:
+        raise ValueError("A valid Solana pool id is required")
+    if timeframe not in {"minute", "hour", "day"}:
+        raise ValueError("timeframe must be minute, hour or day")
+    if aggregate not in {1, 5, 15, 30, 60, 240, 1_440}:
+        raise ValueError("unsupported candle aggregate")
+    if not 10 <= limit <= 500:
+        raise ValueError("limit must be between 10 and 500")
+    url = f"https://api.geckoterminal.com/api/v2/networks/{network}/pools/{pool}/ohlcv/{timeframe}"
+    response = httpx.get(
+        url,
+        params={"aggregate": aggregate, "limit": limit, "currency": "usd", "token": "base"},
+        headers={"Accept": "application/json;version=20230302"},
+        timeout=httpx.Timeout(12.0, connect=4.0),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    attrs = ((payload.get("data") or {}).get("attributes") or {})
+    candles = []
+    for item in attrs.get("ohlcv_list") or []:
+        if not isinstance(item, list) or len(item) < 6:
+            continue
+        try:
+            candles.append({
+                "timestamp": int(item[0]), "open": float(item[1]),
+                "high": float(item[2]), "low": float(item[3]),
+                "close": float(item[4]), "volume": float(item[5]),
+            })
+        except (TypeError, ValueError, OverflowError):
+            continue
+    candles.sort(key=lambda candle: candle["timestamp"])
+    return {
+        "network": network, "pool": pool, "timeframe": timeframe,
+        "aggregate": aggregate, "currency": "usd", "source": "GeckoTerminal OHLCV",
+        "generated_at": int(time.time()), "count": len(candles), "candles": candles,
+    }
