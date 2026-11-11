@@ -8,7 +8,7 @@ android {
  compileSdk = 35
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
  kotlinOptions { jvmTarget = "17" }
- defaultConfig { applicationId = "com.diomaster2d.grokbot"; minSdk = 26; targetSdk = 35; versionCode = 13; versionName = "0.7.6" }
+ defaultConfig { applicationId = "com.diomaster2d.grokbot"; minSdk = 26; targetSdk = 35; versionCode = 14; versionName = "0.7.7" }
  buildFeatures { compose = true }
 }
 dependencies {
