@@ -121,6 +121,16 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    JSONObject(txt)
   }
  }
+ suspend fun bloomBuy(mint:String,amountSol:Double):JSONObject=withContext(Dispatchers.IO) {
+  val payload=JSONObject().put("confirm",true).put("mint",mint).put("amount_sol",amountSol)
+  val req=Request.Builder().url("${base.trimEnd('/')}/bloom/swap").header("Authorization","Bearer $token").post(payload.toString().toRequestBody(media)).build()
+  http.newCall(req).execute().use { res ->
+   val txt=res.body?.string().orEmpty()
+   val body=JSONObject(txt.ifBlank { "{}" })
+   check(res.isSuccessful && body.optBoolean("success")) { body.optString("error","Bloom swap was not accepted") }
+   body
+  }
+ }
  suspend fun bloomStatus():JSONObject=withContext(Dispatchers.IO) {
   val req=Request.Builder().url("${base.trimEnd('/')}/bloom/status").header("Authorization","Bearer $token").get().build()
   http.newCall(req).execute().use { res ->
@@ -160,7 +170,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
  var walletBalance by remember { mutableStateOf<JSONObject?>(null) }
  var walletBalanceMessage by remember { mutableStateOf("Wallet balance not loaded") }; var marketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketData by remember { mutableStateOf<JSONObject?>(null) }; var homeMarketMessage by remember { mutableStateOf("Waiting for DexScreener live market feed") }; var marketMessage by remember { mutableStateOf("Market scanner not started") }; var marketQuery by remember { mutableStateOf("") }
  var chartData by remember { mutableStateOf<JSONObject?>(null) }; var chartMessage by remember { mutableStateOf("Επιλογή token για φόρτωση γραφήματος") }
- var selectedCoin by remember { mutableStateOf<JSONObject?>(null) }; var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var agentAutoRunning by remember { mutableStateOf(false) }; var agentAutoMessage by remember { mutableStateOf("AUTO AGENTS STOPPED") }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
+ var selectedCoin by remember { mutableStateOf<JSONObject?>(null) }; var pendingTrade by remember { mutableStateOf<JSONObject?>(null) }; var activity by remember { mutableStateOf(emptyList<String>()) }; var agentStatuses by remember { mutableStateOf(emptyMap<String,String>()) }; var agentAutoRunning by remember { mutableStateOf(false) }; var agentAutoMessage by remember { mutableStateOf("AUTO AGENTS STOPPED") }; var selectedTool by remember { mutableStateOf("") }; var toolArgs by remember { mutableStateOf("{}") }; var toolOutput by remember { mutableStateOf("") }
  val scope= rememberCoroutineScope()
  fun run(block:suspend()->Unit){scope.launch{busy=true;try{block()}catch(e:Exception){message=e.message?: "Σφάλμα σύνδεσης";status="DISCONNECTED"}finally{busy=false}}}
  LaunchedEffect(Unit) {
@@ -329,7 +339,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
   LazyColumn(Modifier.fillMaxSize().padding(pad).background(Bg).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(13.dp),contentPadding=PaddingValues(top=18.dp,bottom=24.dp)){
    item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
     Column { Text("DioMasteR2D Grokbot Trade",fontSize=20.sp,fontWeight=FontWeight.Bold);Text("SOLANA · SECURE DESK",fontSize=10.sp,color=Muted,letterSpacing=2.sp) }
-    Column(horizontalAlignment=Alignment.End){Text("●  "+status,fontSize=10.sp,color=if(status.startsWith("CONNECTED")) Green else Red);Text("BLOOM ONLY · EXECUTION LOCKED",fontSize=10.sp,color=Red)}
+    Column(horizontalAlignment=Alignment.End){Text("●  "+status,fontSize=10.sp,color=if(status.startsWith("CONNECTED")) Green else Red);Text("BLOOM ONLY · MANUAL BUY CONFIRM",fontSize=10.sp,color=Green)}
    }}
    when(tab){
     0 -> {
@@ -682,13 +692,47 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         Metric("SOURCE",coin.optJSONArray("source")?.optString(0) ?: "DEX",Blue)
        }
        Text("Mint revoked: "+checks.optBoolean("mint_authority",false)+" · Freeze revoked: "+checks.optBoolean("freeze_authority",false)+" · Top10: "+(if(onchain.isNull("top10_share"))"N/A" else String.format(java.util.Locale.US,"%.1f%%",onchain.optDouble("top10_share")*100)),fontSize=10.sp,color=Muted)
-       Text("BUY DISABLED · "+(coin.optJSONArray("blockers")?.let { a -> (0 until a.length()).joinToString { a.optString(it) } } ?: "Awaiting checks"),fontSize=10.sp,color=Red)
+       Text("REAL BLOOM BUY · MANUAL CONFIRM ONLY · MAX 0.01 SOL",fontSize=10.sp,color=Green,fontWeight=FontWeight.Bold)
+        Button(onClick={pendingTrade=coin},enabled=client!=null && seat.trim()=="chief" && !busy,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)){Text("REVIEW REAL BUY · BLOOM")}
       } }
      }
     }
    }
   }
  }
+  pendingTrade?.let { coin ->
+   AlertDialog(
+    onDismissRequest={ if(!busy) pendingTrade=null },
+    title={Text("CONFIRM REAL BLOOM BUY",fontWeight=FontWeight.Bold)},
+    text={
+     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text(coin.optString("symbol","TOKEN")+" · "+coin.optString("name","Unknown"),fontWeight=FontWeight.Bold)
+      Text("Mint: "+coin.optString("mint",""))
+      Text("Amount: 0.01 SOL maximum · one spot-active Bloom wallet only")
+      Text("Bloom auto-orders: take profit +10% and stop loss -5% (100% position each).",color=Blue)
+      Text("Slippage cap: 5% · anti-MEV enabled · duplicate buys skipped.")
+      Text("This sends a REAL BUY request after you confirm. It can spend funds and fees. A returned signature means submitted, not yet confirmed on Solana.",color=Red)
+     }
+    },
+    confirmButton={
+     TextButton(enabled=!busy,onClick={
+      val mint=coin.optString("mint","")
+      run {
+       val c=client ?: error("Connect the chief seat first")
+       val result=c.bloomBuy(mint,0.01)
+       val signatures=result.optJSONArray("signatures")
+       val sig=if(signatures!=null && signatures.length()>0) signatures.optString(0) else "no signature"
+       val skipped=result.optBoolean("skipped")
+       val line=if(skipped) "BLOOM BUY SKIPPED · already bought or filtered" else "BLOOM BUY SUBMITTED · $sig · verify on Solana"
+       activity=(listOf(line)+activity).take(30)
+       message=line
+       pendingTrade=null
+      }
+     }) { Text(if(busy) "SENDING..." else "CONFIRM & SEND BUY",color=Red) }
+    },
+    dismissButton={TextButton(enabled=!busy,onClick={pendingTrade=null}){Text("CANCEL")}}
+   )
+  }
 }
 @Composable private fun AgentOrbit(statuses:Map<String,String>) {
  val names=listOf("CHIEF","SCOUT","RISK","WHALE","SNIPER","RUG","EXIT","SHILL","SIGNAL","JOURNAL")
