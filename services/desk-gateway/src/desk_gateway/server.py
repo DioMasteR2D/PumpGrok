@@ -657,6 +657,82 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         state = self.server.gateway_state  # type: ignore[attr-defined]
+        # Bloom real swaps are isolated from MCP tools and require a fresh
+        # in-app confirmation. The API key never leaves this server.
+        if self.path.split("?", 1)[0] == "/bloom/swap":
+            expected = state["tokens"].get("chief")
+            presented = _presented_token(self.headers)
+            if not expected or not presented or not hmac.compare_digest(presented.encode(), expected.encode()):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief token required"}})
+                return
+            length = self._declared_length()
+            if length is None or length <= 0 or length > 16384:
+                self._send_json(400, {"error": "invalid request size"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(length).decode())
+                if not isinstance(payload, dict) or payload.get("confirm") is not True:
+                    self._send_json(400, {"error": "explicit in-app confirmation required"})
+                    return
+                mint = str(payload.get("mint", "")).strip()
+                amount = float(payload.get("amount_sol", 0))
+                if not 32 <= len(mint) <= 44 or any(c not in "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz" for c in mint):
+                    raise ValueError("invalid Solana mint")
+                if not 0 < amount <= 0.01:
+                    raise ValueError("trade cap is 0.01 SOL")
+                api_key = os.environ.get("BLOOM_API_KEY", "").strip()
+                if not api_key:
+                    self._send_json(503, {"error": "BLOOM_API_KEY is not configured"})
+                    return
+                headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+                wallet_response = httpx.get("https://eu.solana.bloombot.app/api/v1/wallets", headers=headers, timeout=10.0)
+                wallet_response.raise_for_status()
+                wallets = wallet_response.json().get("data", {}).get("wallets", [])
+                active = [w for w in wallets if isinstance(w, dict) and w.get("spot_active") and w.get("address")]
+                if len(active) != 1:
+                    self._send_json(409, {"error": "select exactly one spot-active Bloom wallet before trading", "active_wallets": len(active)})
+                    return
+                wallet_address = str(active[0]["address"])
+                swap_body = {
+                    "address": mint,
+                    "side": "Buy",
+                    "wallets": [{"address": wallet_address, "amount": f"{amount:.9f}"}],
+                    "slippage": 5,
+                    "priority_fee": 0.0005,
+                    "processor_tip": 0.0001,
+                    "anti_mev": True,
+                    "auto_tip": False,
+                    "skip_if_bought": True,
+                    "auto_orders": [
+                        {"target_type": "percentage", "target_value": 10, "amount": 100, "slippage": 5, "priority_fee": 0.0005, "anti_mev": True},
+                        {"target_type": "percentage", "target_value": -5, "amount": 100, "slippage": 5, "priority_fee": 0.0005, "anti_mev": True}
+                    ]
+                }
+                response = httpx.post("https://eu.solana.bloombot.app/api/v1/swap", headers={**headers, "Content-Type": "application/json"}, json=swap_body, timeout=25.0)
+                response.raise_for_status()
+                result = response.json()
+                data = result.get("data") or {}
+                signatures = data.get("signatures") or []
+                self._send_json(200 if result.get("success") else 502, {
+                    "success": bool(result.get("success")),
+                    "order_id": data.get("order_id"),
+                    "signatures": signatures,
+                    "skipped": bool(data.get("skipped")),
+                    "wallet": wallet_address,
+                    "mint": mint,
+                    "amount_sol": amount,
+                    "confirmation": "submitted; final Solana confirmation must be checked"
+                })
+            except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+                self._send_json(400, {"error": str(exc)})
+            except httpx.HTTPStatusError as exc:
+                self._send_json(502, {"error": "Bloom rejected swap", "upstream_status": exc.response.status_code})
+            except httpx.HTTPError:
+                self._send_json(502, {"error": "Bloom service unavailable"})
+            except Exception:
+                log.exception("Bloom swap failed")
+                self._send_json(500, {"error": "Bloom swap failed"})
+            return
         short = _short_from_path(self.path)
         seat_id = state["shorts"].get(short) if short else None
         if short is None or seat_id is None:
