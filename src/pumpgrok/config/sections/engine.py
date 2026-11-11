@@ -52,9 +52,9 @@ class ExitsSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    stop_loss_pct: float = Field(default=30.0, ge=0)
-    take_profit_pct: float = Field(default=120.0, ge=0)
-    trailing_stop_pct: float = Field(default=35.0, ge=0)
+    stop_loss_pct: float = Field(default=6.0, ge=0)
+    take_profit_pct: float = Field(default=130.0, ge=0)
+    trailing_stop_pct: float = Field(default=12.0, ge=0)
     max_hold_seconds: float = Field(default=3600.0, ge=0)
     stop_loss_poll_seconds: float = Field(default=15.0, ge=0)
 
