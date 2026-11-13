@@ -237,7 +237,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    agentStatuses=health
    val online=health.count { it.value.startsWith("CONNECTED") }
    val stamp=java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.getDefault()).format(java.util.Date())
-   agentAutoMessage="AUTO BOT RUNNING · $online/10 agents · $marketCount pairs · $stamp · PAPER / READ-ONLY"
+   agentAutoMessage="AUTO BOT RUNNING · $online/10 agents · $marketCount pairs · $stamp · MONITORING · LIVE EXECUTION LOCKED"
    activity=(listOf(agentAutoMessage,marketState)+health.map { "${it.key.uppercase()} · ${it.value}" }+activity).take(30)
    delay(60_000)
   }
@@ -351,6 +351,27 @@ class DeskClient(private val base:String,private val seat:String,private val tok
       Spacer(Modifier.height(12.dp));Text("Chart waiting for verified market and wallet data.",fontSize=11.sp,color=Muted)
      }}
      }
+     item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
+      Text("AUTO BOT · CENTRAL CONTROL",fontSize=14.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text(agentAutoMessage,fontSize=11.sp,color=if(agentAutoRunning) Green else Muted,fontWeight=FontWeight.Bold)
+      Text("Με το START συνδέονται αυτόματα και τα 10 bots και ξεκινά η παρακολούθηση της αγοράς. Οι πραγματικές εντολές BUY/SELL παραμένουν κλειδωμένες μέχρι να ολοκληρωθούν και να επαληθευτούν ο έλεγχος token, το risk engine και η αυτόματη εκτέλεση Bloom.",fontSize=10.sp,color=Muted)
+      Button(onClick={
+       if(agentAutoRunning) {
+        agentAutoRunning=false
+        agentAutoMessage="AUTO BOT STOPPED"
+       } else {
+        if(token.isBlank() || !gateway.startsWith("https://")) {
+         message="Χρειάζεται σύνδεση Gateway και chief token από τις Rules."
+        } else {
+         agentAutoRunning=true
+         agentAutoMessage="AUTO BOT STARTING · connecting all 10 agents..."
+        }
+       }
+      },enabled=!busy,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=if(agentAutoRunning) Color(0xFF8B3030) else Green,contentColor=Color.Black)) {
+       Text(if(agentAutoRunning) "STOP AUTO BOT" else "START AUTO BOT")
+      }
+      Text("LIVE TRADING: LOCKED · Bloom wallet currently has no SOL",fontSize=9.sp,color=Red,fontWeight=FontWeight.Bold)
+     } } }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("AGENT NETWORK",fontSize=18.sp,fontWeight=FontWeight.Bold);Text("${tools.size} TOOLS",fontSize=11.sp,color=Green)} }
      item { AgentOrbit(agentStatuses) }
      item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
@@ -455,7 +476,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      item { CardBox { Text("10 specialist seats · PumpGrok role definitions. Tool access is controlled by the server roster.",fontSize=12.sp,color=Muted) } }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
       Text(agentAutoMessage,fontSize=11.sp,color=if(agentAutoRunning) Green else Muted,fontWeight=FontWeight.Bold)
-      Text("Το AUTO BOT ανανεώνει ανά 60″ το DexScreener market, αξιολογεί τα διαθέσιμα rule-based signals και ελέγχει τα 10 agent seats. PAPER / READ-ONLY: δεν εκτελεί BUY/SELL.",fontSize=10.sp,color=Muted)
+      Text("Το AUTO BOT συνδέει ανά κύκλο και τα 10 agent seats και παρακολουθεί το DexScreener. Η αυτόματη εκτέλεση BUY/SELL μέσω Bloom δεν έχει ενεργοποιηθεί: λείπει ακόμη επαληθευμένο live execution engine.",fontSize=10.sp,color=Muted)
       Button(onClick={
        if(agentAutoRunning) {
         agentAutoRunning=false
