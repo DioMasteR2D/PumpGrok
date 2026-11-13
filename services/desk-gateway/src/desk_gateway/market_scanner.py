@@ -395,7 +395,7 @@ def market_home(limit: int = 20) -> dict[str, Any]:
                             "verified": False, "mint_authority_revoked": None,
                             "freeze_authority_revoked": None, "top10_share": None,
                             "reason": "On-chain verification unavailable",
-                        })
+                        }
             except (httpx.HTTPError, ValueError, TypeError):
                 log.exception("DexScreener live-pair batch failed")
                 providers.append({"name": "DexScreener live pairs", "status": "UNAVAILABLE"})
