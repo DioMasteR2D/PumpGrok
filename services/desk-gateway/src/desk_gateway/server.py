@@ -44,6 +44,7 @@ from desk_gateway.bloom_execution import (
     submit_swap,
 )
 from desk_gateway.config import GatewayConfig
+from desk_gateway.dex_pool_price import DexPoolPriceSource
 from desk_gateway.market_scanner import market_chart, market_home, scan_market, search_market
 from desk_gateway.market_stream import run_pumpportal_stream
 from pumpgrok.config.settings import Settings
@@ -205,6 +206,10 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
         ids=IdFactory(active_clock, secrets.SystemRandom()),
         clock=active_clock,
         rng=secrets.SystemRandom(),
+        price_source=DexPoolPriceSource(
+            client,
+            os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip(),
+        ),
     )
     engine.attach_flatten_hook(
         flatten_hook_for(store, adapter.inflight_barrier, adapter.close_position)
