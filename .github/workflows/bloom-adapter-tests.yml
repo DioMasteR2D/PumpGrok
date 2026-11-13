@@ -25,4 +25,4 @@ jobs:
       - name: Install gateway dependencies
         run: uv sync --project services/desk-gateway --all-groups
       - name: Run Bloom adapter tests
-        run: uv run --project services/desk-gateway pytest services/desk-gateway/tests/test_bloom_execution.py services/desk-gateway/tests/test_bloom_autopilot.py
+        run: uv run --project services/desk-gateway pytest services/desk-gateway/tests/test_bloom_execution.py services/desk-gateway/tests/test_bloom_autopilot.py services/desk-gateway/tests/test_market_stream.py services/desk-gateway/tests/test_market_agent_evidence.py
