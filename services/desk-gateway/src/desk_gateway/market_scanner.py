@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 
 from desk_gateway.bloom_autopilot import evaluate_live_candidate
-from desk_gateway.market_stream import trade_flow
+from desk_gateway.market_stream import snapshot as market_stream_snapshot, trade_flow
 
 log = logging.getLogger("desk_gateway.market")
 SOLANA = "solana"
@@ -475,6 +475,7 @@ def market_home(limit: int = 20) -> dict[str, Any]:
         "candidate_count": len(output),
         "candidates": output,
         "providers": providers,
+        "trade_stream": market_stream_snapshot(limit=10),
         "errors": errors,
         "decision_policy": "DexScreener live pair data only; transparent rule-based read-only agent assessments.",
         "execution": "LOCKED · no live orders",
