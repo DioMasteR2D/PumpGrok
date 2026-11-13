@@ -26,7 +26,12 @@ def validate_mint(mint: str) -> str:
 
 
 def select_spot_wallet(wallets_payload: dict[str, Any]) -> str:
-    rows = wallets_payload.get("data", {}).get("wallets", [])
+    if not isinstance(wallets_payload, dict):
+        raise BloomExecutionError("Bloom wallet response is malformed")
+    data = wallets_payload.get("data")
+    if not isinstance(data, dict):
+        raise BloomExecutionError("Bloom wallet response has no data object")
+    rows = data.get("wallets")
     if not isinstance(rows, list):
         raise BloomExecutionError("Bloom wallet response has no wallet list")
     active = [
@@ -37,7 +42,10 @@ def select_spot_wallet(wallets_payload: dict[str, Any]) -> str:
         raise BloomExecutionError(
             f"expected exactly one spot-active Bloom wallet; found {len(active)}"
         )
-    return str(active[0]["address"])
+    address = str(active[0]["address"]).strip()
+    if not _MINT_RE.fullmatch(address):
+        raise BloomExecutionError("Bloom spot wallet address is invalid")
+    return address
 
 
 def build_swap_payload(
@@ -52,7 +60,8 @@ def build_swap_payload(
 ) -> dict[str, Any]:
     """Build a bounded single-wallet Bloom swap; SELL amount is percent of holdings."""
     mint = validate_mint(mint)
-    if not wallet_address or len(wallet_address) < 32:
+    wallet_address = str(wallet_address).strip()
+    if not _MINT_RE.fullmatch(wallet_address):
         raise ValueError("invalid Bloom wallet address")
     normalized_side = side.strip().capitalize()
     if normalized_side not in {"Buy", "Sell"}:
@@ -131,8 +140,13 @@ def submit_swap(
         raise BloomExecutionError("Bloom did not accept the swap")
     data = result.get("data") or {}
     signatures = data.get("signatures") or []
-    if data.get("skipped") or not signatures:
-        raise BloomExecutionError("Bloom skipped the swap or returned no transaction signature")
+    if (
+        data.get("skipped")
+        or not isinstance(signatures, list)
+        or not signatures
+        or any(not isinstance(signature, str) or not signature.strip() for signature in signatures)
+    ):
+        raise BloomExecutionError("Bloom skipped the swap or returned no valid transaction signature")
     return {
         "success": True,
         "order_id": data.get("order_id"),
