@@ -16,6 +16,8 @@ from typing import Any
 
 import httpx
 
+from desk_gateway.bloom_autopilot import evaluate_live_candidate
+
 log = logging.getLogger("desk_gateway.market")
 SOLANA = "solana"
 GECKO_NEW_POOLS = "https://api.geckoterminal.com/api/v2/networks/solana/new_pools"
@@ -202,8 +204,15 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             row["entry_status"] = "WAITING_FOR_AI_SCORE" if all(checks.values()) else "REJECTED_OR_UNVERIFIED"
             row["paper_entry_enabled"] = False
             row["blockers"] = [key for key, passed in checks.items() if not passed] + [
-                "AI score provider not configured", "paper order approval pipeline not connected"
+                "AI score provider not configured", "full safety.score_report not connected",
+                "verified bonding-curve account not available", "live position manager not connected"
             ]
+            row["generated_at"] = int(time.time())
+            live_gate = evaluate_live_candidate(row)
+            row["live_entry"] = live_gate
+            if not live_gate["eligible"]:
+                row["entry_status"] = "BLOCKED_LIVE"
+                row["blockers"] = list(dict.fromkeys(row["blockers"] + live_gate["blockers"]))
             rows.append(row)
     rows.sort(key=lambda row: (1 if row.get("boosted") else 0, row.get("volume_24h_usd") or 0, row.get("liquidity_usd") or 0), reverse=True)
     rows = rows[:max(1, min(limit, 30))]
