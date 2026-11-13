@@ -37,6 +37,12 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from desk_gateway.bloom_execution import (
+    BloomExecutionError,
+    build_swap_payload,
+    select_spot_wallet,
+    submit_swap,
+)
 from desk_gateway.config import GatewayConfig
 from desk_gateway.market_scanner import market_chart, market_home, scan_market, search_market
 from desk_gateway.market_stream import run_pumpportal_stream
@@ -675,56 +681,43 @@ class _Handler(BaseHTTPRequestHandler):
                     self._send_json(400, {"error": "explicit in-app confirmation required"})
                     return
                 mint = str(payload.get("mint", "")).strip()
-                amount = float(payload.get("amount_sol", 0))
-                if not 32 <= len(mint) <= 44 or any(c not in "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz" for c in mint):
-                    raise ValueError("invalid Solana mint")
-                if not 0 < amount <= 0.01:
-                    raise ValueError("trade cap is 0.01 SOL")
+                side = str(payload.get("side", "Buy")).strip().capitalize()
+                if side == "Buy":
+                    amount = float(payload.get("amount_sol", 0))
+                    max_buy_sol = float(os.environ.get("BLOOM_MAX_BUY_SOL", "0.01"))
+                elif side == "Sell":
+                    amount = float(payload.get("amount_percent", 0))
+                    max_buy_sol = 0.01
+                else:
+                    raise ValueError("side must be Buy or Sell")
                 api_key = os.environ.get("BLOOM_API_KEY", "").strip()
                 if not api_key:
                     self._send_json(503, {"error": "BLOOM_API_KEY is not configured"})
                     return
                 headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
-                wallet_response = httpx.get("https://eu.solana.bloombot.app/api/v1/wallets", headers=headers, timeout=10.0)
+                wallet_response = httpx.get(
+                    "https://eu.solana.bloombot.app/api/v1/wallets",
+                    headers=headers, timeout=10.0,
+                )
                 wallet_response.raise_for_status()
-                wallets = wallet_response.json().get("data", {}).get("wallets", [])
-                active = [w for w in wallets if isinstance(w, dict) and w.get("spot_active") and w.get("address")]
-                if len(active) != 1:
-                    self._send_json(409, {"error": "select exactly one spot-active Bloom wallet before trading", "active_wallets": len(active)})
-                    return
-                wallet_address = str(active[0]["address"])
-                swap_body = {
-                    "address": mint,
-                    "side": "Buy",
-                    "wallets": [{"address": wallet_address, "amount": f"{amount:.9f}"}],
-                    "slippage": 5,
-                    "priority_fee": 0.0005,
-                    "processor_tip": 0.0001,
-                    "anti_mev": True,
-                    "auto_tip": False,
-                    "skip_if_bought": True,
-                    "auto_orders": [
-                        {"target_type": "percentage", "target_value": 10, "amount": 100, "slippage": 5, "priority_fee": 0.0005, "anti_mev": True},
-                        {"target_type": "percentage", "target_value": -5, "amount": 100, "slippage": 5, "priority_fee": 0.0005, "anti_mev": True}
-                    ]
-                }
-                response = httpx.post("https://eu.solana.bloombot.app/api/v1/swap", headers={**headers, "Content-Type": "application/json"}, json=swap_body, timeout=25.0)
-                response.raise_for_status()
-                result = response.json()
-                data = result.get("data") or {}
-                signatures = data.get("signatures") or []
-                self._send_json(200 if result.get("success") else 502, {
-                    "success": bool(result.get("success")),
-                    "order_id": data.get("order_id"),
-                    "signatures": signatures,
-                    "skipped": bool(data.get("skipped")),
+                wallet_address = select_spot_wallet(wallet_response.json())
+                swap_body = build_swap_payload(
+                    mint=mint, side=side, wallet_address=wallet_address,
+                    amount=amount, max_buy_sol=max_buy_sol,
+                )
+                result = submit_swap(api_key=api_key, payload=swap_body, timeout=25.0)
+                self._send_json(200, {
+                    **result,
                     "wallet": wallet_address,
                     "mint": mint,
-                    "amount_sol": amount,
-                    "confirmation": "submitted; final Solana confirmation must be checked"
+                    "side": side,
+                    "amount_sol": amount if side == "Buy" else None,
+                    "amount_percent": amount if side == "Sell" else None,
                 })
             except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
                 self._send_json(400, {"error": str(exc)})
+            except BloomExecutionError as exc:
+                self._send_json(409, {"error": str(exc)})
             except httpx.HTTPStatusError as exc:
                 self._send_json(502, {"error": "Bloom rejected swap", "upstream_status": exc.response.status_code})
             except httpx.HTTPError:
