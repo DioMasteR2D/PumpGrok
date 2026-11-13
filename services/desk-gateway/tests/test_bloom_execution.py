@@ -66,6 +66,14 @@ def test_wallet_selection_requires_exactly_one_spot_wallet() -> None:
             {"address": WALLET, "spot_active": True},
             {"address": WALLET, "spot_active": True},
         ]}})
+    with pytest.raises(BloomExecutionError, match="malformed"):
+        select_spot_wallet([])
+    with pytest.raises(BloomExecutionError, match="data object"):
+        select_spot_wallet({"data": []})
+    with pytest.raises(BloomExecutionError, match="invalid"):
+        select_spot_wallet({"data": {"wallets": [
+            {"address": "not-a-wallet", "spot_active": True}
+        ]}})
 
 
 def test_submit_swap_does_not_treat_skipped_http_200_as_a_trade(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,3 +102,17 @@ def test_submit_swap_returns_submitted_signature(monkeypatch: pytest.MonkeyPatch
     assert result["success"] is True
     assert result["signatures"] == ["sig-1"]
     assert "submitted" in result["confirmation"]
+
+
+
+def test_submit_swap_rejects_malformed_signature_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_post(*args: Any, **kwargs: Any) -> httpx.Response:
+        request = httpx.Request("POST", "https://eu.solana.bloombot.app/api/v1/swap")
+        return httpx.Response(
+            200, request=request,
+            json={"success": True, "data": {"order_id": "bad", "signatures": ["", None]}},
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    with pytest.raises(BloomExecutionError, match="valid transaction signature"):
+        submit_swap(api_key="test-key", payload={"side": "Buy"})
