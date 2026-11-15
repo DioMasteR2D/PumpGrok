@@ -223,7 +223,7 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
             adapter=adapter, store=store, clock=active_clock, exits=settings.exits
         )
         supervisor_state["paper_supervisor"] = supervisor
-        supervisor_state["paper_supervisor_task"] = asyncio.get_running_loop().create_task(
+        supervisor_state["paper_supervisor_task"] = asyncio.get_event_loop().create_task(
             supervisor.run(interval_s=max(1.0, settings.exits.stop_loss_poll_seconds))
         )
     bank = MemoryBank(data_dir / "memory.jsonl")
