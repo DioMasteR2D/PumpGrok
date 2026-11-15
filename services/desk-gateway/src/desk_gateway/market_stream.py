@@ -20,6 +20,7 @@ _lock = Lock()
 _events: deque[dict[str, Any]] = deque(maxlen=250)
 _trade_events: deque[dict[str, Any]] = deque(maxlen=5_000)
 _subscribed_mints: set[str] = set()
+_creation_evidence: dict[str, dict[str, Any]] = {}
 _state: dict[str, Any] = {
     "connected": False,
     "last_event_at": None,
@@ -34,6 +35,27 @@ def snapshot(limit: int = 40) -> dict[str, Any]:
         events = list(_events)[-max(1, min(limit, 100)):]
         state = dict(_state)
     return {"provider": "PumpPortal WebSocket", **state, "events": events}
+
+
+def creation_evidence(mint: str, *, max_age_seconds: int = 900, now: float | None = None) -> dict[str, Any]:
+    """Return recent PumpPortal creation metadata; provider claims are not on-chain proof."""
+    current = time.time() if now is None else float(now)
+    with _lock:
+        row = dict(_creation_evidence.get(mint) or {})
+    if not row:
+        return {"available": False, "verified": False, "reason": "No PumpPortal creation event"}
+    age = current - float(row.get("received_at", 0))
+    fresh = 0 <= age <= max(1, int(max_age_seconds))
+    return {
+        "available": fresh,
+        "verified": False,
+        "provider": "PumpPortal creation event",
+        "age_seconds": max(0, int(age)),
+        "curve_account": row.get("curve_account") if fresh else None,
+        "creator": row.get("creator") if fresh else None,
+        "signature": row.get("signature") if fresh else None,
+        "reason": None if fresh else "PumpPortal creation metadata is stale",
+    }
 
 
 def trade_flow(mint: str, *, window_seconds: int = 300, now: float | None = None) -> dict[str, Any]:
@@ -120,6 +142,17 @@ async def run_pumpportal_stream() -> None:
                         "signature": payload.get("signature"),
                         "received_at": received_at,
                     }
+                    # PumpPortal create events may carry these addresses. Keep them as
+                    # unverified provider evidence; safety.score_report must still prove them.
+                    if event_type in {"create", "newtoken", "new_token"} or payload.get("bondingCurveKey"):
+                        creation = {
+                            "curve_account": str(payload.get("bondingCurveKey") or "").strip() or None,
+                            "creator": str(payload.get("traderPublicKey") or "").strip() or None,
+                            "signature": payload.get("signature"),
+                            "received_at": received_at,
+                        }
+                        with _lock:
+                            _creation_evidence[mint] = creation
                     with _lock:
                         _events.append(row)
                         _state["last_event_at"] = received_at
