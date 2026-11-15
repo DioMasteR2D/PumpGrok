@@ -29,7 +29,12 @@ MAX_TOP10_SHARE = 0.25
 # Avoid repeated upstream calls when clients refresh or switch market tabs.
 _SCAN_CACHE_LOCK = threading.Lock()
 _SCAN_CACHE: dict[str, Any] = {"at": 0.0, "value": None}
-_SCAN_CACHE_TTL_S = 25.0
+_SCAN_CACHE_TTL_S = 60.0
+
+# Serialize public-provider requests across concurrent Android refreshes.
+_PROVIDER_REQUEST_LOCK = threading.Lock()
+_PROVIDER_LAST_REQUEST: dict[str, float] = {}
+_PROVIDER_MIN_INTERVAL_S = 0.8
 
 
 def _get_with_backoff(
@@ -41,7 +46,16 @@ def _get_with_backoff(
 ) -> httpx.Response:
     """Respect Retry-After and retry transient provider errors with bounded delay."""
     last_response: httpx.Response | None = None
+    host = httpx.URL(url).host or url
     for attempt in range(max(1, attempts)):
+        # Shared per-process pacing prevents Home, Market and Search refreshes
+        # from bursting the same public API at once.
+        with _PROVIDER_REQUEST_LOCK:
+            now = time.monotonic()
+            wait = _PROVIDER_MIN_INTERVAL_S - (now - _PROVIDER_LAST_REQUEST.get(host, 0.0))
+            if wait > 0:
+                time.sleep(wait)
+            _PROVIDER_LAST_REQUEST[host] = time.monotonic()
         response = client.get(url, params=params)
         last_response = response
         if response.status_code != 429 and response.status_code < 500:
@@ -243,9 +257,9 @@ def search_market(query: str, limit: int = 20) -> dict[str, Any]:
     if not term or len(term) > 100: raise ValueError("query must contain 1-100 characters")
     if not 1 <= limit <= 20: raise ValueError("limit must be between 1 and 20")
     started = time.time()
-    response = httpx.get("https://api.dexscreener.com/latest/dex/search", params={"q": term}, timeout=httpx.Timeout(12.0, connect=4.0), headers={"Accept": "application/json"})
-    response.raise_for_status()
-    payload = response.json()
+    with httpx.Client(timeout=httpx.Timeout(12.0, connect=4.0), headers={"Accept": "application/json"}) as client:
+        response = _get_with_backoff(client, "https://api.dexscreener.com/latest/dex/search", params={"q": term}, attempts=3)
+        payload = response.json()
     grouped: dict[str, list[dict[str, Any]]] = {}
     for pair in payload.get("pairs") or []:
         if not isinstance(pair, dict) or pair.get("chainId") != SOLANA: continue
@@ -326,7 +340,7 @@ def market_home(limit: int = 20) -> dict[str, Any]:
     now = time.time()
     with _HOME_CACHE_LOCK:
         cached = _HOME_CACHE.get("value")
-        if cached is not None and now - float(_HOME_CACHE.get("at", 0.0)) < 20:
+        if cached is not None and now - float(_HOME_CACHE.get("at", 0.0)) < 60:
             result = copy.deepcopy(cached)
             result["cache_age_ms"] = int((now - float(_HOME_CACHE["at"])) * 1000)
             return result
