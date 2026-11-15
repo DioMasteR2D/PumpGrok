@@ -309,7 +309,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
      val ledgerClient = DeskClient(gateway.trim().removeSuffix("/"), "risk", token.trim())
      val riskTools = ledgerClient.connect()
      if (riskTools.any { it.name == "portfolio_ledger_read" }) {
-      val response = ledgerClient.call("portfolio_ledger_read", JSONObject().put("limit", 100))
+      val response = ledgerClient.call("portfolio_ledger_read", JSONObject().put("limit", 500))
       val raw = response.optJSONArray("content")?.optJSONObject(0)?.optString("text").orEmpty()
       if (raw.isNotBlank()) {
        val events = JSONObject(raw).optJSONArray("events") ?: org.json.JSONArray()
@@ -323,12 +323,24 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         val asset = symbol.ifBlank { if (mint.length > 12) mint.take(6) + "…" + mint.takeLast(4) else mint.ifBlank { "—" } }
         val side = payload.optString("side", "").uppercase()
         val detail = when (type) {
-         "FillRecorded" -> side + " FILLED · " + asset + " · " + payload.optString("filled_fraction", "—") + " filled"
-         "OrderPlaced" -> side + " ORDER · " + asset
-         "OrderRejected" -> "ORDER REJECTED · " + asset + " · " + payload.optString("reason", "blocked")
-         "PositionOpened" -> "POSITION OPENED · " + asset
-         "PositionClosed" -> "POSITION CLOSED · " + asset + " · " + payload.optString("reason", "")
-         "JournalNote" -> "AI NOTE · " + payload.optString("note_kind", "analysis") + " · " + asset
+         "FillRecorded" -> side + " FILLED · " + asset +
+          " · " + String.format(java.util.Locale.US, "%.4f SOL", payload.optDouble("filled_lamports", 0.0) / 1_000_000_000.0) +
+          " · " + payload.optString("filled_units", "0") + " units" +
+          " · avg " + payload.optString("price_avg", "—") +
+          " · " + payload.optString("filled_fraction", "—") + " filled"
+         "OrderPlaced" -> side + " ORDER · " + asset +
+          " · " + String.format(java.util.Locale.US, "%.4f SOL", payload.optDouble("size_lamports", 0.0) / 1_000_000_000.0) +
+          " · ticket " + payload.optString("ticket_id", "—")
+         "OrderRejected" -> "ORDER REJECTED · " + asset + " · " + payload.optString("reason", "blocked") + " · " + payload.optString("detail", "")
+         "PositionOpened" -> "POSITION OPENED · " + asset +
+          " · entry " + payload.optString("price_entry", "—") +
+          " · cost " + String.format(java.util.Locale.US, "%.4f SOL", payload.optDouble("cost_basis_lamports", 0.0) / 1_000_000_000.0) +
+          " · " + payload.optString("token_units", "0") + " units"
+         "PositionClosed" -> "POSITION CLOSED · " + asset +
+          " · P&L " + String.format(java.util.Locale.US, "%+.4f SOL", payload.optDouble("realized_pnl_lamports", 0.0) / 1_000_000_000.0) +
+          " (" + payload.optString("pnl_pct", "—") + "%) · " + payload.optString("reason", "")
+         "JournalNote" -> "AGENT " + payload.optString("seat", "desk").uppercase() +
+          " · " + payload.optString("note_kind", "note") + " · " + payload.optString("text", "")
          "Escalation" -> "RISK ALERT · " + asset
          else -> type + " · " + asset
         }
@@ -526,8 +538,8 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     2 -> {
      item { Text("ACTIVITY & PAPER LEDGER",fontSize=20.sp,fontWeight=FontWeight.Bold) }
      item { CardBox { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-      Text("PAPER EXECUTION HISTORY",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
-      Text("Οι εγγραφές προέρχονται από το append-only ledger του server. Δεν εμφανίζονται εικονικές κινήσεις όταν δεν υπάρχουν fills.",fontSize=10.sp,color=Muted)
+      Text("PAPER EXECUTION HISTORY · FULL LEDGER",fontSize=12.sp,fontWeight=FontWeight.Bold,color=Blue)
+      Text("Πραγματικές εγγραφές του εικονικού ledger: BUY/SELL fills, ποσό SOL, units, μέση τιμή, entry/exit, realized P&L και agent notes. Δεν δημιουργούνται δοκιμαστικές ή ψεύτικες συναλλαγές.",fontSize=10.sp,color=Muted)
       Button(onClick={run {
        val base=gateway.trim().removeSuffix("/")
        val ledgerClient=DeskClient(base,"risk",token.trim())
@@ -551,12 +563,20 @@ class DeskClient(private val base:String,private val seat:String,private val tok
         val source=event.optString("source","paper").uppercase()
         val time=event.optString("ts_utc","")
         val detail=when(type) {
-         "FillRecorded" -> "$side FILLED · $asset · ${payload.optString("filled_fraction","—")} filled"
-         "OrderPlaced" -> "$side ORDER · $asset · ${payload.optString("ticket_id","")}"
-         "OrderRejected" -> "ORDER REJECTED · ${payload.optString("reason","unknown")} · $asset"
-         "PositionOpened" -> "POSITION OPENED · $asset"
-         "PositionClosed" -> "POSITION CLOSED · $asset · ${payload.optString("reason","")}"
-         "JournalNote" -> "AGENT NOTE · ${payload.optString("note_kind","note")} · $asset"
+         "FillRecorded" -> "$side FILLED · $asset · " +
+          String.format(java.util.Locale.US, "%.4f SOL", payload.optDouble("filled_lamports",0.0)/1_000_000_000.0) +
+          " · ${payload.optString("filled_units","0")} units · avg ${payload.optString("price_avg","—")} · ${payload.optString("filled_fraction","—")} filled"
+         "OrderPlaced" -> "$side ORDER · $asset · " +
+          String.format(java.util.Locale.US, "%.4f SOL", payload.optDouble("size_lamports",0.0)/1_000_000_000.0) +
+          " · ticket ${payload.optString("ticket_id","—")}"
+         "OrderRejected" -> "ORDER REJECTED · ${payload.optString("reason","unknown")} · $asset · ${payload.optString("detail","")}"
+         "PositionOpened" -> "POSITION OPENED · $asset · entry ${payload.optString("price_entry","—")} · cost " +
+          String.format(java.util.Locale.US, "%.4f SOL", payload.optDouble("cost_basis_lamports",0.0)/1_000_000_000.0) +
+          " · ${payload.optString("token_units","0")} units"
+         "PositionClosed" -> "POSITION CLOSED · $asset · P&L " +
+          String.format(java.util.Locale.US, "%+.4f SOL", payload.optDouble("realized_pnl_lamports",0.0)/1_000_000_000.0) +
+          " (${payload.optString("pnl_pct","—")}% ) · ${payload.optString("reason","")}"
+         "JournalNote" -> "AGENT ${payload.optString("seat","desk").uppercase()} · ${payload.optString("note_kind","note")} · ${payload.optString("text","")}"
          "Escalation" -> "RISK ALERT · $asset"
          else -> "$type · $asset"
         }
