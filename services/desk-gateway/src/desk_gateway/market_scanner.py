@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 
 from desk_gateway.bloom_autopilot import evaluate_live_candidate
-from desk_gateway.market_stream import snapshot as market_stream_snapshot, trade_flow
+from desk_gateway.market_stream import creation_evidence, snapshot as market_stream_snapshot, trade_flow
 
 log = logging.getLogger("desk_gateway.market")
 SOLANA = "solana"
@@ -198,6 +198,9 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
                 "price_change_24h_pct": _number((pair.get("priceChange") or {}).get("h24")),
                 "source": ["DexScreener"], "url": pair.get("url"),
                 "boosted": bool(profile.get("boosted")), "dex_id": pair.get("dexId"),
+                # Provider-supplied launch metadata is displayed for diagnostics only.
+                # It is never treated as verified curve/creator evidence by the entry gate.
+                "launch_evidence": creation_evidence(mint),
             }
             try:
                 row["onchain"] = _verify_mint(client, rpc_url, mint)
