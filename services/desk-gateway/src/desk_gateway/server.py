@@ -344,6 +344,18 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
             return
+        if path == "/paper/status":
+            expected = state["tokens"].get("chief")
+            presented = _presented_token(self.headers)
+            if not expected or not presented or not hmac.compare_digest(presented.encode(), expected.encode()):
+                self._send_json(401, {"error": {"code": "unauthorized", "message": "chief token required"}})
+                return
+            supervisor = state.get("paper_supervisor")
+            if supervisor is None:
+                self._send_json(503, {"mode": "paper", "running": False, "error": "paper supervisor unavailable"})
+                return
+            self._send_json(200, supervisor.status())
+            return
         if path == "/market/chart":
             presented = _presented_token(self.headers)
             allowed = (state["tokens"].get("scout"), state["tokens"].get("chief"))
