@@ -16,6 +16,9 @@ from typing import Any
 
 import httpx
 
+from desk_gateway.bloom_autopilot import evaluate_live_candidate
+from desk_gateway.market_stream import snapshot as market_stream_snapshot, trade_flow
+
 log = logging.getLogger("desk_gateway.market")
 SOLANA = "solana"
 GECKO_NEW_POOLS = "https://api.geckoterminal.com/api/v2/networks/solana/new_pools"
@@ -202,8 +205,15 @@ def scan_market(limit: int = 40) -> dict[str, Any]:
             row["entry_status"] = "WAITING_FOR_AI_SCORE" if all(checks.values()) else "REJECTED_OR_UNVERIFIED"
             row["paper_entry_enabled"] = False
             row["blockers"] = [key for key, passed in checks.items() if not passed] + [
-                "AI score provider not configured", "paper order approval pipeline not connected"
+                "AI score provider not configured", "full safety.score_report not connected",
+                "verified bonding-curve account not available", "live position manager not connected"
             ]
+            row["generated_at"] = int(time.time())
+            live_gate = evaluate_live_candidate(row)
+            row["live_entry"] = live_gate
+            if not live_gate["eligible"]:
+                row["entry_status"] = "BLOCKED_LIVE"
+                row["blockers"] = list(dict.fromkeys(row["blockers"] + live_gate["blockers"]))
             rows.append(row)
     rows.sort(key=lambda row: (1 if row.get("boosted") else 0, row.get("volume_24h_usd") or 0, row.get("liquidity_usd") or 0), reverse=True)
     rows = rows[:max(1, min(limit, 30))]
@@ -274,24 +284,36 @@ _HOME_CACHE: dict[str, Any] = {"at": 0.0, "value": None}
 
 
 def _agent_market_decisions(row: dict[str, Any]) -> list[dict[str, str]]:
-    """Transparent rule-based agent assessments; never pretend an LLM ran."""
+    """Evidence-backed market assessments; no placeholder is presented as an LLM run."""
     volume = row.get("volume_24h_usd")
     liquidity = row.get("liquidity_usd")
     change_1h = row.get("price_change_1h_pct")
     ratio = (volume / liquidity) if isinstance(volume, (int, float)) and isinstance(liquidity, (int, float)) and liquidity > 0 else None
     discovered = row.get("trend") == "NEW"
-    momentum = (isinstance(change_1h, (int, float)) and change_1h >= 5) or (ratio is not None and ratio >= 1.0)
+    flow = row.get("trade_flow") if isinstance(row.get("trade_flow"), dict) else {}
+    net_buy = flow.get("net_buy_volume_sol")
+    observed_flow = flow.get("fresh") is True
+    momentum = (
+        (isinstance(change_1h, (int, float)) and change_1h >= 5)
+        or (ratio is not None and ratio >= 1.0)
+        or (observed_flow and isinstance(net_buy, (int, float)) and net_buy > 0)
+    )
+    onchain = row.get("onchain") if isinstance(row.get("onchain"), dict) else {}
+    authority_ok = onchain.get("verified") is True and onchain.get("mint_authority_revoked") is True and onchain.get("freeze_authority_revoked") is True
+    top10 = onchain.get("top10_share")
+    holders_ok = isinstance(top10, (int, float)) and top10 <= MAX_TOP10_SHARE
+    rug_ok = authority_ok and holders_ok
     return [
-        {"agent": "SCOUT", "decision": "NEW TOKEN" if discovered else "TRENDING POOL", "reason": "DexScreener latest token profile/boost" if discovered else "DexScreener live pair data"},
-        {"agent": "SIGNAL", "decision": "MOMENTUM WATCH" if momentum else "NO CONFIRMED MOMENTUM", "reason": f"1h change={change_1h if change_1h is not None else 'n/a'}%; 24h volume/liquidity={round(ratio, 2) if ratio is not None else 'n/a'}"},
-        {"agent": "WHALE", "decision": "FLOW UNKNOWN", "reason": "Wallet-level trade flow is not connected to this snapshot"},
-        {"agent": "RUG", "decision": "UNVERIFIED", "reason": "Mint/freeze authority and holder concentration not checked in this fast feed"},
-        {"agent": "RISK", "decision": "BLOCK ENTRY", "reason": "Safety verification is incomplete"},
-        {"agent": "SNIPER", "decision": "WAIT", "reason": "No entry while Risk gate is blocked"},
-        {"agent": "EXIT", "decision": "NO POSITION CONTEXT", "reason": "No open-position signal attached to this market snapshot"},
-        {"agent": "SHILL", "decision": "SENTIMENT UNKNOWN", "reason": "Social sentiment provider is not connected"},
-        {"agent": "JOURNAL", "decision": "OBSERVATION ONLY", "reason": "No trade event exists for this token in the paper ledger"},
-        {"agent": "CHIEF", "decision": "HOLD / WATCH", "reason": "Discovery is live; entry remains blocked pending safety checks"},
+        {"agent": "SCOUT", "decision": "NEW TOKEN" if discovered else "TRENDING POOL", "reason": "DexScreener discovery profile" if discovered else "DexScreener live pair data"},
+        {"agent": "SIGNAL", "decision": "MOMENTUM WATCH" if momentum else "NO CONFIRMED MOMENTUM", "reason": f"1h change={change_1h if change_1h is not None else 'n/a'}%; volume/liquidity={round(ratio, 2) if ratio is not None else 'n/a'}; observed net flow={net_buy if observed_flow else 'unknown'} SOL"},
+        {"agent": "WHALE", "decision": "NET BUY FLOW" if observed_flow and isinstance(net_buy, (int, float)) and net_buy > 0 else ("NET SELL FLOW" if observed_flow and isinstance(net_buy, (int, float)) and net_buy < 0 else "FLOW UNKNOWN"), "reason": f"PumpPortal 5m trades={flow.get('trade_count', 0)}, unique buyers={flow.get('unique_buyers', 0)}, unique sellers={flow.get('unique_sellers', 0)}, net={net_buy if observed_flow else 'unknown'} SOL"},
+        {"agent": "RUG", "decision": "BASIC CHECKS PASS" if rug_ok else "UNVERIFIED / RISK", "reason": f"mint/freeze revoked={authority_ok}; top10 share={top10 if top10 is not None else 'unknown'}"},
+        {"agent": "RISK", "decision": "BLOCK ENTRY", "reason": "Full safety.score_report, verified bonding curve and live position controls are not connected"},
+        {"agent": "SNIPER", "decision": "WAIT", "reason": "Execution remains locked until every risk and execution prerequisite passes"},
+        {"agent": "EXIT", "decision": "NO POSITION CONTEXT", "reason": "Bloom position reconciliation is not connected to this market snapshot"},
+        {"agent": "SHILL", "decision": "SENTIMENT UNKNOWN", "reason": "No verified social sentiment provider is connected"},
+        {"agent": "JOURNAL", "decision": "OBSERVATION ONLY", "reason": "No corresponding execution event is recorded for this candidate"},
+        {"agent": "CHIEF", "decision": "HOLD / WATCH", "reason": "Market evidence is connected; autonomous entry remains fail-closed"},
     ]
 
 
@@ -345,6 +367,7 @@ def market_home(limit: int = 20) -> dict[str, Any]:
         # Enrich up to 30 unique Solana mints in one supported batch request.
         mints = list(discovered.keys())[:30]
         matched: dict[str, list[dict[str, Any]]] = {}
+        onchain_by_mint: dict[str, dict[str, Any]] = {}
         if mints:
             try:
                 response = _get_with_backoff(
@@ -362,6 +385,17 @@ def market_home(limit: int = 20) -> dict[str, Any]:
                     "name": "DexScreener live pairs", "status": "OK",
                     "requested": len(mints), "matched": len(matched),
                 })
+                # Verify the same candidates used by the UI; no fast-feed row is trusted alone.
+                rpc_url = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip()
+                for mint in mints:
+                    try:
+                        onchain_by_mint[mint] = _verify_mint(client, rpc_url, mint)
+                    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+                        onchain_by_mint[mint] = {
+                            "verified": False, "mint_authority_revoked": None,
+                            "freeze_authority_revoked": None, "top10_share": None,
+                            "reason": "On-chain verification unavailable",
+                        }
             except (httpx.HTTPError, ValueError, TypeError):
                 log.exception("DexScreener live-pair batch failed")
                 providers.append({"name": "DexScreener live pairs", "status": "UNAVAILABLE"})
@@ -398,6 +432,19 @@ def market_home(limit: int = 20) -> dict[str, Any]:
             "boosted": bool(profile.get("boosted")),
             "pair_created_at": pair.get("pairCreatedAt"),
             "dex_id": pair.get("dexId"),
+            "generated_at": int(time.time()),
+            "onchain": onchain_by_mint.get(mint, {
+                "verified": False, "mint_authority_revoked": None,
+                "freeze_authority_revoked": None, "top10_share": None,
+                "reason": "On-chain verification unavailable",
+            }),
+            "trade_flow": trade_flow(mint),
+        }
+        row["checks"] = {
+            "liquidity": isinstance(liquidity, (int, float)) and liquidity >= MIN_LIQUIDITY_USD,
+            "mint_authority": row["onchain"].get("mint_authority_revoked") is True,
+            "freeze_authority": row["onchain"].get("freeze_authority_revoked") is True,
+            "whale_concentration": isinstance(row["onchain"].get("top10_share"), (int, float)) and row["onchain"]["top10_share"] <= MAX_TOP10_SHARE,
         }
         row["agents"] = _agent_market_decisions(row)
         row["entry_status"] = "BLOCKED_UNVERIFIED"
@@ -428,6 +475,7 @@ def market_home(limit: int = 20) -> dict[str, Any]:
         "candidate_count": len(output),
         "candidates": output,
         "providers": providers,
+        "trade_stream": market_stream_snapshot(limit=10),
         "errors": errors,
         "decision_policy": "DexScreener live pair data only; transparent rule-based read-only agent assessments.",
         "execution": "LOCKED · no live orders",
