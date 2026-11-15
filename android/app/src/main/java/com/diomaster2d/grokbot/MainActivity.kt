@@ -1,5 +1,7 @@
 package com.diomaster2d.grokbot
 
+// Paper simulation equity is configured in the gateway profile.
+
 import android.os.Bundle
 import android.webkit.WebView
 import android.webkit.WebViewClient
