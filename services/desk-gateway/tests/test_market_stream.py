@@ -42,3 +42,27 @@ def test_trade_flow_does_not_invent_missing_activity() -> None:
     assert flow["fresh"] is False
     assert flow["trade_count"] == 0
     assert flow["net_buy_volume_sol"] == 0.0
+
+
+def test_creation_evidence_is_explicitly_unverified_and_expires() -> None:
+    with market_stream._lock:
+        market_stream._creation_evidence.clear()
+        market_stream._creation_evidence["mint-new"] = {
+            "curve_account": "curve-account",
+            "creator": "creator-wallet",
+            "signature": "signature",
+            "received_at": 1_000,
+        }
+
+    fresh = market_stream.creation_evidence("mint-new", now=1_010)
+    stale = market_stream.creation_evidence("mint-new", max_age_seconds=30, now=1_100)
+    missing = market_stream.creation_evidence("mint-missing", now=1_010)
+
+    assert fresh["available"] is True
+    assert fresh["verified"] is False
+    assert fresh["curve_account"] == "curve-account"
+    assert fresh["creator"] == "creator-wallet"
+    assert stale["available"] is False
+    assert stale["curve_account"] is None
+    assert missing["available"] is False
+    assert missing["verified"] is False
