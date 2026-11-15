@@ -95,6 +95,14 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    JSONObject(txt)
   }
  }
+ suspend fun paperStatus():JSONObject=withContext(Dispatchers.IO) {
+  val req=Request.Builder().url("${base.trimEnd('/')}/paper/status").header("Authorization","Bearer $token").get().build()
+  http.newCall(req).execute().use { res ->
+   val txt=res.body?.string().orEmpty()
+   check(res.isSuccessful) { "Paper status HTTP ${res.code}: ${txt.take(250)}" }
+   JSONObject(txt)
+  }
+ }
  suspend fun marketHome():JSONObject=withContext(Dispatchers.IO) {
   val req=Request.Builder().url("${base.trimEnd('/')}/market/home?limit=20").header("Authorization","Bearer $token").get().build()
   http.newCall(req).execute().use { res ->
@@ -225,7 +233,8 @@ class DeskClient(private val base:String,private val seat:String,private val tok
     chief.connect()
     val snapshot=chief.marketHome()
     marketCount=snapshot.optInt("candidate_count",snapshot.optJSONArray("candidates")?.length() ?: 0)
-    marketState="DEXSCREENER · $marketCount valid pairs · rule-based signals"
+    val paper=chief.paperStatus()
+    marketState="PAPER EXIT ENGINE · ${paper.optInt("cycles")} cycles · ${paper.optInt("open_positions")} open · ${paper.optInt("sells")} sells · errors ${paper.optInt("errors")} · DEX ${marketCount} pairs"
    } catch(e:Exception) { marketState="MARKET FEED ERROR · ${e.message ?: "unavailable"}" }
    for (short in seats) {
     try {
@@ -237,7 +246,7 @@ class DeskClient(private val base:String,private val seat:String,private val tok
    agentStatuses=health
    val online=health.count { it.value.startsWith("CONNECTED") }
    val stamp=java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.getDefault()).format(java.util.Date())
-   agentAutoMessage="AUTO BOT RUNNING · $online/10 agents · $marketCount pairs · $stamp · MONITORING · LIVE EXECUTION LOCKED"
+   agentAutoMessage="AUTO BOT · $online/10 seats online · $stamp · PAPER MODE · LIVE EXECUTION LOCKED"
    activity=(listOf(agentAutoMessage,marketState)+health.map { "${it.key.uppercase()} · ${it.value}" }+activity).take(30)
    delay(60_000)
   }
