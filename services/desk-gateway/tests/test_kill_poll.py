@@ -133,6 +133,9 @@ def test_idle_gateway_flattens_on_alert_kill_flatten(
         alert_channel=channel,  # type: ignore[arg-type]
         kill_poll_interval_s=POLL_INTERVAL_S,
     )
+    paper_task = server.gateway_state.get("paper_supervisor_task")  # type: ignore[attr-defined]
+    assert paper_task is not None
+    assert server.gateway_state.get("paper_supervisor") is not None  # type: ignore[attr-defined]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -153,3 +156,4 @@ def test_idle_gateway_flattens_on_alert_kill_flatten(
     # Clean shutdown: the periodic poll task exists and is finished, not left on the loop.
     assert task is not None
     assert task.done()
+    assert paper_task.done()
