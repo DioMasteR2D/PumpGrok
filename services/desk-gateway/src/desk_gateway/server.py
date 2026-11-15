@@ -47,6 +47,7 @@ from desk_gateway.config import GatewayConfig
 from desk_gateway.dex_pool_price import DexPoolPriceSource
 from desk_gateway.market_scanner import market_chart, market_home, scan_market, search_market
 from desk_gateway.market_stream import run_pumpportal_stream
+from desk_gateway.paper_supervisor import PaperExitSupervisor
 from pumpgrok.config.settings import Settings
 from pumpgrok.contracts.projection import (
     default_contracts_dir,
@@ -155,6 +156,7 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
     alert_channel: AlertChannel | None = None,
     clock: Clock | None = None,
     http_client: httpx.AsyncClient | None = None,
+    supervisor_state: dict[str, Any] | None = None,
 ) -> tuple[ToolRegistry, dict[str, BotManifest], RiskEngine]:
     """Compose the full catalog registry the gateway projects (no tool logic).
 
@@ -214,6 +216,16 @@ def build_gateway_registry(  # noqa: PLR0913 - keyword-only wiring inputs, one c
     engine.attach_flatten_hook(
         flatten_hook_for(store, adapter.inflight_barrier, adapter.close_position)
     )
+    # The exit worker is started only by the gateway owner loop. It manages
+    # existing ledger positions through the same paper adapter and risk engine.
+    if supervisor_state is not None:
+        supervisor = PaperExitSupervisor(
+            adapter=adapter, store=store, clock=active_clock, exits=settings.exits
+        )
+        supervisor_state["paper_supervisor"] = supervisor
+        supervisor_state["paper_supervisor_task"] = asyncio.get_running_loop().create_task(
+            supervisor.run(interval_s=max(1.0, settings.exits.stop_loss_poll_seconds))
+        )
     bank = MemoryBank(data_dir / "memory.jsonl")
     mode = settings.effective_mode
 
@@ -950,6 +962,7 @@ def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call s
     loop = asyncio.new_event_loop()
     ready = threading.Event()
     cell: dict[str, Any] = {}
+    supervisor_state: dict[str, Any] = {}
 
     def _serve_tools() -> None:
         asyncio.set_event_loop(loop)
@@ -963,7 +976,9 @@ def _start_owner_loop(  # noqa: PLR0913 - keyword-only wiring inputs, one call s
                 alert_channel=alert_channel,
                 clock=clock,
                 http_client=http_client,
+                supervisor_state=supervisor_state,
             )
+            cell.update(supervisor_state)
             names = cell["registry"].names()
             cell["global_map"] = {transport_name(name): name for name in names}
             # RISK-004: an idle gateway must still read KILL lines, so the poll runs on this loop.
@@ -1021,6 +1036,8 @@ def create_server(  # noqa: PLR0913 - keyword-only wiring inputs, one call site
         "owner_loop": owner_loop,
         "kill_poll_task": cell["kill_poll_task"],
         "pumpportal_task": cell.get("pumpportal_task"),
+        "paper_supervisor": cell.get("paper_supervisor"),
+        "paper_supervisor_task": cell.get("paper_supervisor_task"),
         "clock": active_clock,
         "shorts": short_to_seat(config.contracts_dir),
     }
@@ -1034,8 +1051,9 @@ def close_server(server: ThreadingHTTPServer) -> None:
     loop = state.get("owner_loop")
     poll_task = state.get("kill_poll_task")
     pump_task = state.get("pumpportal_task")
+    supervisor_task = state.get("paper_supervisor_task")
     if loop is not None:
-        for task in (poll_task, pump_task):
+        for task in (poll_task, pump_task, supervisor_task):
             if task is not None:
                 future = asyncio.run_coroutine_threadsafe(_cancel_and_wait(task), loop)
                 future.result(timeout=_CLOSE_TIMEOUT_S)
