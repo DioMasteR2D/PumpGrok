@@ -12,7 +12,7 @@ import secrets
 from typing import Any
 
 from pumpgrok.core.adapter import OrderRequest
-from pumpgrok.core.ids import CorrelationId, IdFactory, bind_correlation
+from pumpgrok.core.ids import CorrelationId, IdFactory, bind_calling_seat, bind_correlation
 from pumpgrok.execution.paper_adapter.adapter import PaperAdapter
 from pumpgrok.ledger.store import LedgerStore
 from pumpgrok.replay.clock import Clock
@@ -76,7 +76,7 @@ class PaperExitSupervisor:
             exit_reason=rule,
             correlation_id=str(correlation),
         )
-        with bind_seat(EXIT_SEAT), bind_correlation(correlation):
+        with bind_seat(EXIT_SEAT), bind_calling_seat(EXIT_SEAT), bind_correlation(correlation):
             fill = await self.adapter.place(request)
         self.sells += 1
         return {"status": fill.status.value, "reason": fill.reason or ""}
