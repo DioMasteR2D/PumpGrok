@@ -53,6 +53,7 @@ class PaperExitSupervisor:
         self.cycles = 0
         self.sells = 0
         self.errors = 0
+        self.open_positions = 0
         self.last_cycle_at: float | None = None
         self.last_error: str | None = None
         self.rules = ExitRules(
@@ -91,7 +92,7 @@ class PaperExitSupervisor:
             "errors": self.errors,
             "last_cycle_at": self.last_cycle_at,
             "last_error": self.last_error,
-            "open_positions": sum(1 for pos in self.adapter._fold_state().positions.values() if pos.token_units > 0),
+            "open_positions": self.open_positions,
         }
 
     async def run(self, interval_s: float = 5.0) -> None:
@@ -99,6 +100,7 @@ class PaperExitSupervisor:
             try:
                 await self.adapter.mark_open_positions(source="paper")
                 await self.rules.check(self.clock.now())
+                self.open_positions = len(await self.adapter.positions())
                 self.cycles += 1
                 self.last_cycle_at = self.clock.now()
                 self.last_error = None
