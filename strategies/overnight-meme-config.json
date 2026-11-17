@@ -1,0 +1,87 @@
+{
+  "name": "Grok Bot Overnight Meme-Coin Strategy",
+  "network": "Solana",
+  "session": {
+    "start_local": "23:00",
+    "end_local": "07:00",
+    "starting_balance_usd": 70
+  },
+  "universe": {
+    "venues": ["pump.fun", "Raydium", "Meteora"],
+    "max_pair_age_hours": 6,
+    "min_liquidity_usd": 40000,
+    "min_volume_5m_usd": 25000,
+    "min_holders": 300,
+    "reject_frozen_mint": true,
+    "reject_open_mint_authority": true,
+    "require_lp_burned_or_locked_days": 30
+  },
+  "scanner": {
+    "volume_spike_multiple_1h": 5,
+    "min_buy_sell_ratio_percent": 70,
+    "smart_money_wallets_tracked": 40,
+    "smart_money_min_buys": 3,
+    "smart_money_window_minutes": 10,
+    "require_kol_wallet_actual_buy": true,
+    "min_signals_to_enter": 2,
+    "scanner_can_trade": false
+  },
+  "rug_check": {
+    "max_dev_wallet_percent": 5,
+    "max_top_10_holders_percent": 35,
+    "reject_bundled_launch": true,
+    "require_honeypot_sell_simulation_pass": true,
+    "execution_requires_pass": true
+  },
+  "sizer": {
+    "equity_based": true,
+    "min_position_percent_equity": 20,
+    "max_position_percent_equity": 40,
+    "max_open_positions": 2,
+    "size_reduction_after_consecutive_losses": 2,
+    "size_reduction_percent": 50
+  },
+  "executor": {
+    "max_slippage_percent": 2.5,
+    "entry_parts": 2,
+    "take_profit": [
+      {"sell_position_percent": 40, "multiple": 2},
+      {"sell_position_percent": 30, "multiple": 4},
+      {"hold_position_percent": 30, "trailing_stop_percent": 25}
+    ],
+    "hard_stop_percent": -12,
+    "time_stop_minutes": 25,
+    "exit_if_dev_sells": true,
+    "exit_if_lp_pulled": true
+  },
+  "rules": {
+    "skip_if_gain_last_hour_percent_at_least": 300,
+    "chase_requires_pullback": true,
+    "daily_drawdown_limit_from_peak_percent": 30,
+    "pause_on_daily_drawdown": true,
+    "compound_profits": true
+  },
+  "logging": {
+    "events": ["ENTER", "EXIT", "FILTERED"],
+    "include_reason": true,
+    "include_size": true,
+    "include_fill_price": true,
+    "include_pnl": true,
+    "update_equity_curve_on_every_close": true
+  },
+  "morning_report": {
+    "time_local": "07:00",
+    "include": [
+      "start_balance",
+      "end_balance",
+      "best_trade",
+      "worst_trade",
+      "total_trades",
+      "top_3_coins_by_profit"
+    ]
+  },
+  "runtime_status": {
+    "strategy_spec_only": true,
+    "live_execution_enabled": false
+  }
+}
