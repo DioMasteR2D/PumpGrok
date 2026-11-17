@@ -301,8 +301,26 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(405, {"error": {"code": "method_not_allowed", "message": "use POST"}})
 
     def do_GET(self) -> None:
+        # Public read-only terminal UI; it exposes no seat tokens, ledger or execution tools.
+        route = self.path.split("?", 1)[0]
+        if route == "/":
+            route = "/dashboard"
+        if route == "/dashboard":
+            page = Path(__file__).parent / "static" / "dashboard.html"
+            try:
+                body = page.read_bytes()
+            except OSError:
+                self._send_json(503, {"error": {"code": "dashboard_unavailable"}})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         # Liveness only: no tool, seat or ledger detail, and no token required.
-        if self.path.split("?", 1)[0] == "/healthz":
+        if route == "/healthz":
             self._send_json(200, {"ok": True, "service": "desk-gateway"})
             return
         self._method_not_allowed()
