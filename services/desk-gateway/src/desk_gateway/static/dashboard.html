@@ -36,7 +36,19 @@ async function scanMarket(){
    const fresh=created&&ageMs<=6*3600000,passL=liq>=40000,passV=v5>=25000;
    const gates=[fresh?"AGE ✓":"AGE ✕",passL?"LIQ ✓":"LIQ ✕",passV?"VOL ✓":"VOL ✕","HOLDERS ?","RUG CHECK ?"];
    const color=fresh&&passL&&passV?"var(--amber)":"var(--muted)";
-   return '<article class="panel" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+String(x.baseToken.symbol||"TOKEN").replace(/[<>&"]/g,"")+'</b><span class="muted">'+String(x.dexId||"DEX")+'</span></div><div class="muted" style="margin:5px 0;word-break:break-all">'+x.baseToken.address+'</div><div class="muted">Age '+age(created)+' · Liquidity +fmt(liq)+' · Vol 5m +fmt(v5)+'</div><div style="color:'+color+';font-size:10px;margin-top:7px">'+gates.join(" · ")+'</div><a href="'+String(x.url||"https://dexscreener.com/solana").replace(/"/g,"")+'" target="_blank" rel="noopener" style="color:var(--green);font-size:11px">Open pair ↗</a></article>'
+   return '<article class="panel" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+String(x.baseToken.symbol||"TOKEN").replace(/[<>&"]/g,"")+'</b><span class="muted">'+String(x.dexId||"DEX")+'</span></div><div class="muted" style="margin:5px 0;word-break:break-all">'+x.baseToken.address+'</div><div class="muted">Age '+age(created)+' · Liquidity </div><div style="color:'+color+';font-size:10px;margin-top:7px">'+gates.join(" · ")+'</div><a href="'+String(x.url||"https://dexscreener.com/solana").replace(/"/g,"")+'" target="_blank" rel="noopener" style="color:var(--green);font-size:11px">Open pair ↗</a></article>'
+  }).join("");
+  status.textContent="DexScreener live feed · "+rows.length+" Solana pairs · updated "+new Date().toLocaleTimeString();
+ }catch(e){status.textContent="Market feed unavailable · "+String(e.message||e);box.innerHTML='<div class="empty">Could not load live feed. No synthetic data displayed.</div>'}
+}
+scanMarket();setInterval(scanMarket,60000);
+</script></main></body></html>+fmt(liq)+' · Vol 5m </div><div style="color:'+color+';font-size:10px;margin-top:7px">'+gates.join(" · ")+'</div><a href="'+String(x.url||"https://dexscreener.com/solana").replace(/"/g,"")+'" target="_blank" rel="noopener" style="color:var(--green);font-size:11px">Open pair ↗</a></article>'
+  }).join("");
+  status.textContent="DexScreener live feed · "+rows.length+" Solana pairs · updated "+new Date().toLocaleTimeString();
+ }catch(e){status.textContent="Market feed unavailable · "+String(e.message||e);box.innerHTML='<div class="empty">Could not load live feed. No synthetic data displayed.</div>'}
+}
+scanMarket();setInterval(scanMarket,60000);
+</script></main></body></html>+fmt(v5)+'</div><div style="color:'+color+';font-size:10px;margin-top:7px">'+gates.join(" · ")+'</div><a href="'+String(x.url||"https://dexscreener.com/solana").replace(/"/g,"")+'" target="_blank" rel="noopener" style="color:var(--green);font-size:11px">Open pair ↗</a></article>'
   }).join("");
   status.textContent="DexScreener live feed · "+rows.length+" Solana pairs · updated "+new Date().toLocaleTimeString();
  }catch(e){status.textContent="Market feed unavailable · "+String(e.message||e);box.innerHTML='<div class="empty">Could not load live feed. No synthetic data displayed.</div>'}
