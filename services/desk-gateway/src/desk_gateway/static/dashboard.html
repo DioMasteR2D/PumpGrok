@@ -27,10 +27,8 @@ async function scanMarket(){
  const box=$("market-list"),status=$("feed-status");
  try{
   status.textContent="Fetching latest Solana token profiles…";
-  const prof=await fetch("https://api.dexscreener.com/token-profiles/latest/v1",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("profiles HTTP "+r.status);return r.json()});
-  const tokens=[...new Set((Array.isArray(prof)?prof:[]).filter(x=>x.chainId==="solana"&&x.tokenAddress).map(x=>x.tokenAddress))].slice(0,30);
-  if(!tokens.length){box.innerHTML='<div class="empty">No Solana profiles returned by the feed.</div>';status.textContent="Feed connected · no Solana profiles";return}
-  const pairs=await fetch("https://api.dexscreener.com/tokens/v1/solana/"+tokens.join(","),{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("pairs HTTP "+r.status);return r.json()});
+  const payload=await fetch("/api/market/solana",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("market API HTTP "+r.status);return r.json()});
+  const pairs=payload.pairs||[];
   const rows=(Array.isArray(pairs)?pairs:[]).filter(x=>x.chainId==="solana"&&x.baseToken).sort((a,b)=>(b.volume?.m5||0)-(a.volume?.m5||0)).slice(0,18);
   if(!rows.length){box.innerHTML='<div class="empty">Profiles received; no matching pair data yet.</div>'}
   else box.innerHTML=rows.map(x=>{
