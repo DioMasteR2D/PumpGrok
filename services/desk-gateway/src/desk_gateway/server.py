@@ -29,6 +29,8 @@ import logging
 import re
 import secrets
 import threading
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -318,6 +320,45 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
+            return
+        if route == "/api/market/solana":
+            # Same-origin, bounded read-only proxy avoids mobile-browser CORS failures.
+            try:
+                req = urllib.request.Request(
+                    "https://api.dexscreener.com/token-profiles/latest/v1",
+                    headers={"User-Agent": "PumpGrok/1.0"},
+                )
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    profiles = json.loads(response.read(512_000))
+                addresses = list(dict.fromkeys(
+                    item.get("tokenAddress")
+                    for item in profiles
+                    if isinstance(item, dict)
+                    and item.get("chainId") == "solana"
+                    and isinstance(item.get("tokenAddress"), str)
+                ))[:30]
+                if not addresses:
+                    self._send_json(200, {"source": "dexscreener", "pairs": []})
+                    return
+                pair_req = urllib.request.Request(
+                    "https://api.dexscreener.com/tokens/v1/solana/" + ",".join(addresses),
+                    headers={"User-Agent": "PumpGrok/1.0"},
+                )
+                with urllib.request.urlopen(pair_req, timeout=8) as response:
+                    pairs = json.loads(response.read(1_500_000))
+                clean = [
+                    item for item in pairs
+                    if isinstance(item, dict)
+                    and item.get("chainId") == "solana"
+                    and isinstance(item.get("baseToken"), dict)
+                ] if isinstance(pairs, list) else []
+                clean.sort(
+                    key=lambda item: float((item.get("volume") or {}).get("m5") or 0),
+                    reverse=True,
+                )
+                self._send_json(200, {"source": "dexscreener", "pairs": clean[:30]})
+            except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+                self._send_json(502, {"error": {"code": "market_feed_unavailable"}})
             return
         # Liveness only: no tool, seat or ledger detail, and no token required.
         if route == "/healthz":
