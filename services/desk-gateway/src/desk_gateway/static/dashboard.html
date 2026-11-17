@@ -16,7 +16,32 @@
 <div class="panel agent"><i class="dot"></i><div><b>EQUITY</b><p>Balance and equity curve on each close</p></div></div>
 </section>
 <div class="section">LIVE FLOW</div><section class="flow"><div class="step">01 · SCAN</div><div class="step">02 · CHECK</div><div class="step">03 · SIZE</div><div class="step">04 · EXEC</div><div class="step">05 · LOG</div></section>
-<div class="grid"><section><div class="section">MARKET CANDIDATES</div><div class="panel empty">No verified live market feed connected.<br><span class="muted">Tokens will appear here only after source validation.</span></div><div class="section">NIGHT LOG</div><div class="panel log">SYSTEM · strategy profile loaded<br>GATE · live execution disabled in current backend<br>FEED · waiting for verified Solana data source</div></section>
+<div class="grid"><section><div class="section">MARKET CANDIDATES</div><div class="muted" id="feed-status">Connecting to market feed…</div><div id="market-list" style="margin-top:10px"><div class="empty">Loading real Solana pairs…</div></div><div class="section">NIGHT LOG</div><div class="panel log">SYSTEM · strategy profile loaded<br>GATE · live execution disabled in current backend<br>FEED · waiting for verified Solana data source</div></section>
 <section><div class="section">CURRENT POSITION</div><div class="panel empty">No position data<br><span class="muted">No simulated or invented trades shown.</span></div><div class="section">EQUITY CURVE</div><div class="panel"><div class="muted">Starting equity · $70.00</div><div class="bar" style="margin:12px 0"><i></i></div><div class="warning">Dashboard shell is active. Trading and live balances are not connected yet; this page will not imply that orders have been placed.</div></div></section></div>
 <footer>Strategy profile: overnight-meme-config.json · Risk controls remain fail-closed · Never enter a seed phrase on this page.</footer>
-</main></body></html>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>Number.isFinite(Number(n))?Number(n).toLocaleString("en-US",{maximumFractionDigits:0}):"—";
+const age=ms=>{if(!ms)return "unknown";const h=(Date.now()-ms)/3600000;return h<1?Math.max(0,Math.round(h*60))+"m":h.toFixed(1)+"h"};
+async function scanMarket(){
+ const box=$("market-list"),status=$("feed-status");
+ try{
+  status.textContent="Fetching latest Solana token profiles…";
+  const prof=await fetch("https://api.dexscreener.com/token-profiles/latest/v1",{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("profiles HTTP "+r.status);return r.json()});
+  const tokens=[...new Set((Array.isArray(prof)?prof:[]).filter(x=>x.chainId==="solana"&&x.tokenAddress).map(x=>x.tokenAddress))].slice(0,30);
+  if(!tokens.length){box.innerHTML='<div class="empty">No Solana profiles returned by the feed.</div>';status.textContent="Feed connected · no Solana profiles";return}
+  const pairs=await fetch("https://api.dexscreener.com/tokens/v1/solana/"+tokens.join(","),{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("pairs HTTP "+r.status);return r.json()});
+  const rows=(Array.isArray(pairs)?pairs:[]).filter(x=>x.chainId==="solana"&&x.baseToken).sort((a,b)=>(b.volume?.m5||0)-(a.volume?.m5||0)).slice(0,18);
+  if(!rows.length){box.innerHTML='<div class="empty">Profiles received; no matching pair data yet.</div>'}
+  else box.innerHTML=rows.map(x=>{
+   const created=x.pairCreatedAt||0,liq=x.liquidity?.usd||0,v5=x.volume?.m5||0,ageMs=created?Date.now()-created:0;
+   const fresh=created&&ageMs<=6*3600000,passL=liq>=40000,passV=v5>=25000;
+   const gates=[fresh?"AGE ✓":"AGE ✕",passL?"LIQ ✓":"LIQ ✕",passV?"VOL ✓":"VOL ✕","HOLDERS ?","RUG CHECK ?"];
+   const color=fresh&&passL&&passV?"var(--amber)":"var(--muted)";
+   return '<article class="panel" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+String(x.baseToken.symbol||"TOKEN").replace(/[<>&"]/g,"")+'</b><span class="muted">'+String(x.dexId||"DEX")+'</span></div><div class="muted" style="margin:5px 0;word-break:break-all">'+x.baseToken.address+'</div><div class="muted">Age '+age(created)+' · Liquidity +fmt(liq)+' · Vol 5m +fmt(v5)+'</div><div style="color:'+color+';font-size:10px;margin-top:7px">'+gates.join(" · ")+'</div><a href="'+String(x.url||"https://dexscreener.com/solana").replace(/"/g,"")+'" target="_blank" rel="noopener" style="color:var(--green);font-size:11px">Open pair ↗</a></article>'
+  }).join("");
+  status.textContent="DexScreener live feed · "+rows.length+" Solana pairs · updated "+new Date().toLocaleTimeString();
+ }catch(e){status.textContent="Market feed unavailable · "+String(e.message||e);box.innerHTML='<div class="empty">Could not load live feed. No synthetic data displayed.</div>'}
+}
+scanMarket();setInterval(scanMarket,60000);
+</script></main></body></html>
